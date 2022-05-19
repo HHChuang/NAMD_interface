@@ -1,0 +1,62 @@
+#!/bin/bash
+# $1 = name list of qchem output files
+
+function main(){
+    # $1 = name list of qchem output files
+    checkOut $1
+
+    # grep energy 
+    grepSepE $1 # output: E.dat 
+    # grepOneE one.out 
+}
+
+function checkOut(){
+    tot=$(wc -l $1 | awk '{print $1}')
+    suc=$(grep -c Thank *.out | cut -d ':' -f 2 | grep -c 1)
+    fail=$(($tot-$suc))
+    grep -c Thank *.out | grep -v :1 | cut -d ':' -f 1 > fail.dat
+
+    echo "total: $tot, success: $suc, fail: $fail"
+    echo ''
+    echo 'Failed files: fail.dat '
+    cat fail.dat 
+}
+
+function grepSepE(){
+    num=0 
+    rm -f E.dat 
+    for name in `cat $1`
+    do 
+        R=$(echo $name | sed 's/H2_//g' )
+        Eref=$(grep 'Total energy in the final basis set =' $name.out | tail -n 1 | awk '{print $9}')
+        E0=$(grep 'Total energy for state  1:' $name.out | tail -n 1 | awk '{print $6}')
+        E1=$(grep 'Total energy for state  2:' $name.out | tail -n 1 | awk '{print $6}')
+        E2=$(grep 'Total energy for state  3:' $name.out | tail -n 1 | awk '{print $6}')
+        E3=$(grep 'Total energy for state  4:' $name.out | tail -n 1 | awk '{print $6}')
+        E4=$(grep 'Total energy for state  5:' $name.out | tail -n 1 | awk '{print $6}')
+        E5=$(grep 'Total energy for state  6:' $name.out | tail -n 1 | awk '{print $6}')
+        E6=$(grep 'Total energy for state  7:' $name.out | tail -n 1 | awk '{print $6}')
+        num=$(($num+1))
+        echo $R $E0 $E1 $E2 $E3 $E4 $E5 $E6 >> E.dat 
+    done 
+}
+
+function grepOneE(){
+    rm -f E.dat idx.tmp
+    for ((i=1; i <= 267; i++))
+    do 
+        echo $i >> idx.tmp
+    done 
+
+    grep 'Total energy for state  1:' one.out | awk '{print $6}' > E0.tmp
+    grep 'Total energy for state  2:' one.out | awk '{print $6}' > E1.tmp 
+    grep 'Total energy for state  3:' one.out | awk '{print $6}' > E2.tmp 
+    grep 'Total energy for state  4:' one.out | awk '{print $6}' > E3.tmp 
+    grep 'Total energy for state  5:' one.out | awk '{print $6}' > E4.tmp 
+    grep 'Total energy for state  6:' one.out | awk '{print $6}' > E5.tmp 
+    # grep 'Total energy for state  7:' one.out | awk '{print $6}' > E6.tmp
+
+    paste idx.tmp E0.tmp E1.tmp E2.tmp E3.tmp E4.tmp E5.tmp > E.dat
+    rm -f *.tmp 
+}
+main $1
