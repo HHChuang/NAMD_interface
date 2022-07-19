@@ -1,0 +1,114 @@
+#!/bin/bash
+#   2022/07/12, Grace, H.G.Chuang@leeds.ac.uk
+#   $1 = *.0
+
+function main(){
+
+    propPrelim="/localhome/chmhch/src/prop_prelim.x"
+    propCorr="/localhome/chmhch/src/prop_corr.x"
+    charge=0
+    multi=1 
+
+    checkInput $1 # output: $natom, $stat, $statlist()
+    root_name=$(echo $1 | cut -d '.' -f 1) 
+    $propPrelim $root_name # input: $root_name.0, output: $root_name.p
+
+    grep 'Total energy for state ' $root_name\_nonad.out \
+        | awk '{print $6, $5}' | sed 's/://g' | head -n $stat >> $root_name.p
+    
+    get_force $root_name.p $root_name\_force_ $natom $stat
+    get_nonad $root_name.p $root_name\_nonad.out $natom $stat
+    
+    $propCorr $root_name # output: $root_name.1
+}
+
+function checkInput(){
+    # $1 = name of first point with dynamic information 
+    # output: 
+    #   $natom
+    #   $stat
+    #   $statlist()
+
+    [ "$1" == "" ] && echo "file $1 is not exist, exit" && exit
+
+    natom=$(head -n 1 $1 | awk '{print $1}')
+    
+    stat=$(head -n 1 $1  | awk '{print $2}')
+    statlist=()
+    for ((i=1; i <= $stat; i++))
+    do 
+        statlist+=($i)
+    done
+    # echo ${statlist[@]}
+
+}
+
+function get_nonad(){
+    # $1 = name of input for dynamic calculation
+    # $2 = name of QChem output file 
+    # $3 = $natom
+    # $4 = $stat
+
+    name=$1
+    name_nonad=$2 
+    natom=$3 
+    stat=$4
+
+    echo '!Coupling vector, #state1 < #state2,  #component !!The code reads only 3*n_atoms*n_states*(n_states-1) lines for coupling!!!' >> $name
+    # FIXME: with or without ? 
+    k=0
+    for ((i=1; i<=$stat; i++))
+    do 
+        for ((j=$i+1; j<=$stat; j++))
+        do
+            grep -A $(($natom + 2 )) 'derivative coupling with ' $name_nonad \
+            | sed -n "$((4 + $k*9)), $((8 + $k*9)) p" | awk '{print $2,$3,$4}' > coupling.tmp 
+            component=1
+            for ((na=1; na<=$natom; na++))
+            do 
+                for ((coord=1; coord<=3; coord++))
+                do 
+                    cp=$(sed -n "$na, $na p " coupling.tmp | awk "{print \$$coord}" ) 
+                    echo $cp $i $j $component >> $name
+                    component=$(($component + 1))
+                done 
+            done 
+            k=$(($k + 1)) # derivative coupling matrix 
+        done 
+    done 
+    rm -f coupling.tmp 
+}
+
+function get_force(){
+    # '''
+    #     $1 = name of input for dynamic calculation
+    #     $2 = root name of QChem output file 
+    #     $3 = $natom
+    #     $4 = $stat
+    # '''
+    
+    name=$1
+    name_force=$2 
+    natom=$3 
+    stat=$4
+
+    echo '!Forces, #state, #component' >> $name
+    for ((i=1; i<=$stat; i++))
+    do 
+        component=1 
+        for ((na=1; na<=$natom; na++))
+        do 
+            grep -A 5 'Calculating analytic gradient of the SCF energy' $name_force$i.out \
+            | tail -n 3 | awk "{print \$$(($na+1))}" >> force.tmp 
+            for ((j=1;j<=3;j++)) 
+            do
+                force=$(sed -n "$j,$j p" force.tmp)
+                echo $force $i $component >> $name
+                component=$(($component + 1))
+            done 
+        done 
+    done 
+    rm -f force.tmp 
+}
+
+main $1 
