@@ -1,0 +1,133 @@
+#!/bin/bash
+#
+# $1 = Bonds.ang
+# $2 = line number of the selected time frame 
+#
+# 2022/08/12, Grace, H.G.Chuang@leeds.ac.uk
+# 
+
+covB_low=0.0
+covB_up=2.0
+
+function main(){
+    # $1 = Bonds.ang
+
+    # 1. Calculate the amount of successful covalent bond for both CH and HH bonds
+
+    calcCovB $@
+    # output: $totCHbond, $totHHbond
+
+    # 2. Group CH, HH bond and reaction into different types depend on the amount of sucessful covalent bond.
+
+    groupCH 
+    # input: $totCHbond
+    # output: $CHresult
+
+    groupHH 
+    # input: $totHHbond
+    # output: $HHresult
+
+    grouprxn 
+    # input: $CHresult, $HHresult
+    # output: $rxn 
+
+    # 3. Std-out the above analysed result
+    echo $CHresult $HHresult 
+    echo $rxn
+}
+
+function calcCovB(){
+    # input:
+    # $1 = Bonds.ang (file)
+    # $2 = line number of the selected time frame
+    # 
+    # output:
+    # 1. $totCHbond (integer)
+    # 2. $totHHbond (integer)
+    # 
+
+    CH=( $(sed -n "$2,$2 p" $1 | awk '{print $2, $3, $4, $5}') ) 
+    HH=( $(sed -n "$2,$2 p" $1 | awk '{print $6, $7, $8, $9, $10, $11}') )
+    totCHbond=0
+    totHHbond=0
+    for ((i=0;i<4;i++))
+    do
+        CHbond_low=$(echo ${CH[$i]} ' > ' $covB_low | bc -l)
+        CHbond_up=$(echo ${CH[$i]} ' < ' $covB_up | bc -l)
+        if [ $CHbond_low == 1 ] && [ $CHbond_up == 1 ]; 
+        then 
+            totCHbond=$(( $totCHbond + 1 ))  
+        fi 
+    done
+    for ((i=0;i<6;i++))
+    do
+            HHbond_low=$(echo ${HH[$i]} ' > ' $covB_low | bc -l)
+            HHbond_up=$(echo ${HH[$i]} ' < ' $covB_up | bc -l)
+            if [ $HHbond_low == 1 ] && [ $HHbond_up == 1 ]; 
+            then 
+                totHHbond=$(( $totHHbond + 1 ))
+            fi 
+    done
+}
+
+function groupCH(){
+    CHresult=0
+    if [ $totCHbond -eq 0 ] 
+    then 
+        CHresult=$( echo 'Others' )
+    elif  [ $totCHbond -eq 1 ]
+    then 
+        CHresult=$( echo 'CH1' )
+    elif [ $totCHbond -eq 2 ] 
+    then 
+        CHresult=$( echo 'CH2' ) 
+    elif [ $totCHbond -eq 3 ] 
+    then 
+        CHresult=$( echo 'CH3' )
+    elif [ $totCHbond -eq 4 ] 
+    then 
+        CHresult=$( echo 'CH4' )
+    fi 
+}
+
+function groupHH(){
+    HHresult=0
+    if [ $totHHbond -eq 0 ] 
+    then 
+            HHresult=$( echo '0HH' )
+    elif  [ $totHHbond -eq 1 ]
+    then 
+            HHresult=$( echo '1HH' )
+    else  
+            HHresult=$( echo 'xHH' )
+    fi
+}
+
+function grouprxn(){
+    rxn='Others'
+    if [ $CHresult == 'CH4' ] 
+    then 
+        rxn='CH4' 
+    elif [ $CHresult == 'CH3' ] 
+    then 
+        rxn='CH3+H' 
+    elif [ $CHresult == 'CH2' ] 
+    then 
+        if [ $HHresult == '1HH' ]
+        then 
+            rxn='CH2+H2' 
+        else 
+            rxn='CH2+2H' 
+        fi 
+    elif [ $CHresult == 'CH1' ] 
+    then
+        if [ $HHresult == '1HH' ]
+        then 
+            rxn='CH+H2+H'
+        else 
+            rxn='CH+3H'
+        fi 
+    fi 
+}
+
+main $@

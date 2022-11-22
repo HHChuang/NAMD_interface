@@ -1,0 +1,42 @@
+#!/bin/bash
+# 
+# Purpose: 
+#   In the current directory with the PATH as $home, execute script runNAMD_head_chmlin38 in the selected subdirectories which are listed in the input argument.
+#   
+#   If the selected directory only has only one file (molecular position and momentum file with the file extension as '.iniPM', then it goes to the first mode which calculate the initial electronic wavefunction, or it goes to the second mode which read the existed electronic wavefunction.)
+# 
+#   For the second mode, it only support the second run for now. 
+# 
+# Input: 
+#   $1 = list of subdirectory name 
+#   $2 = time step in a.u. 
+# 
+# Pre-requist: 
+#   ~/bin/runNAMD_head_chmlin38
+# 
+#     2022/08/22, Grace, H.G.Chuang@leeds.ac.uk
+# 
+
+dirRoot='traj_'
+fileRoot='g_'
+home=`pwd`
+numfile_threshold='20'
+tstep=$2 
+
+for fileidx in `cat $1`
+do 
+    cd $home 
+    numfile=$(ls $dirRoot$fileidx | wc -l )
+    
+    # If the number of file is less than $numfile_threshold, start trajectory form the first point. (i.e. calculate directory *_WF for storing wavefunction)
+    if [ $numfile -lt $numfile_threshold ]
+    then 
+        # First mode, calculate electronic wavefunction.
+        firstPt="$fileRoot$fileidx.iniPM"
+    else 
+        # Second mode, read existed electronic wavefunction.
+        firstPt=$( ls  $home/$dirRoot$fileidx | grep _nonad.out | sort -n -t _ -k 3 | tail -n 1 )
+    fi 
+    cd $home/$dirRoot$fileidx
+    runNAMD_head_chmlin38 $firstPt $tstep 
+done 

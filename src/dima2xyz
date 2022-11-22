@@ -1,0 +1,42 @@
+#!/bin/bash
+########################################################################
+# Convert Dima's file (coordinate and momentum in a.u.) to xyz file (in angstrom) for jmol. 
+# 
+# Input: 
+#   $1 = Dima sampling file 
+#   $2 = Atom list 
+# 
+# Output:
+#   $1.xyz 
+# 
+# 2022/11/04, Grace, g.h.chuang@leeds.ac.uk
+# 
+########################################################################
+
+keyword=Geometry
+bohr2ang=0.529177
+
+input=$1
+atomlist=( $(cat $2) )
+natom=$( echo ${#atomlist[@]} )
+output=$input.xyz
+totL=$(grep "$keyword" $input | tail -n 1 | awk '{print $2}')
+
+rm -f $output
+for ((i=1;i<=$totL;i++))
+do 
+    echo $natom >> $output 
+    echo $input\_$i >> $output 
+    grep -A $natom "$keyword $i" $input | tail -n $natom > tmp 
+    for ((n=1;n<=$natom;n++))
+    do 
+        coord=( $(sed -n "$n,$n p" tmp ) )
+        x_ang=$( awk " BEGIN { print ${coord[0]} * $bohr2ang}" )
+        y_ang=$( awk " BEGIN { print ${coord[1]} * $bohr2ang}" )
+        z_ang=$( awk " BEGIN { print ${coord[2]} * $bohr2ang}")
+
+        idx=$(($n-1))
+        echo ${atomlist[$idx]} $x_ang $y_ang $z_ang >> $output 
+    done 
+done 
+rm -f tmp 
