@@ -1,4 +1,4 @@
-#!/usr/local/bin/gnuplot --persist
+#!/usr/local/bin/gnuplot -c
 outputFile='../aux/Bonds_'.ARG1.'.png'
 inputFile='Bonds_'.ARG1.'.ang'
 
