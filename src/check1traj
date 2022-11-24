@@ -39,24 +39,24 @@ function main(){
     cd  $home/$orderedSubDir
     get_var $rootName.0
 
-    for ((subdir=0;subdir<${#orderedSubDir[@]};subdir++))
-    do 
-        cd $home/${orderedSubDir[$subdir]}
-        echo ${orderedSubDir[$subdir]}
-        genList ${rootName[$subdir]} $nstate # output: ordered_list.dat 
-        checkOut ordered_list.dat 
-        echo '--------------------------------------'
-    done 
+    # for ((subdir=0;subdir<${#orderedSubDir[@]};subdir++))
+    # do 
+    #     cd $home/${orderedSubDir[$subdir]}
+    #     echo ${orderedSubDir[$subdir]}
+    #     genList ${rootName[$subdir]} $nstate # output: ordered_list.dat 
+    #     checkOut ordered_list.dat 
+    #     echo '--------------------------------------'
+    # done 
 
-    # 2. Extract desired information 
-    # Copy alll necessary qchem files into target directory; separate metadata to avoid contaminating original qchem files. 
-    # input: 
-    #   1. $tarDir 
-    #   2. ${orderedSubDir[@]}
-    #   3. ordered_list.dat in each subdirectories  
-    #   output directory: $tarDir (reordered qchem output files)
-    cd $home 
-    combineDir 
+    # # 2. Extract desired information 
+    # # Copy alll necessary qchem files into target directory; separate metadata to avoid contaminating original qchem files. 
+    # # input: 
+    # #   1. $tarDir 
+    # #   2. ${orderedSubDir[@]}
+    # #   3. ordered_list.dat in each subdirectories  
+    # #   output directory: $tarDir (reordered qchem output files)
+    # cd $home 
+    # combineDir 
 
     # output: PE.dat, TE.dat, popu.dat, traj.xyz and Bonds.ang 
     cd $home 
@@ -185,6 +185,24 @@ function processData(){
     echo "#t ${bondname[@]}" > Bonds.ang 
 
     calcT=$(echo "scale=6; $tstep * $time2fs " | bc -l )
+
+    # set parameters for extracting nonadiabatic coupling; testfile: 0.p
+    tmp=$(grep -n 'Coupling vector' 0.p| cut -d ':' -f 1 )
+    line_nonad_i=$(( $tmp +1 ))
+    line_nonad_f=$(wc -l 0.p | cut -d ' ' -f 1 ) 
+    n_nonad=$(( $nstate * ($nstate - 1) / 2 ))
+    n_dof=$(( $natom * 3 ))
+    # formating header for nonadCoup.dat 
+    nonadname=() 
+    for (( i=0; i < $nstate; i++ ))
+    do 
+        for (( j=$(( $i+1 )); j < $nstate; j++ ))
+        do 
+            nonadname+=( $i-$j )
+        done 
+    done 
+    echo "#t ${nonadname[@]}"  > nonadCoup.dat 
+
     for ((pt_i=0; pt_i<$totnpt; pt_i++))
     do 
         # 1. grep potential energy in each state: E.dat 
@@ -216,18 +234,19 @@ function processData(){
         echo $t_i ${popu[@]} >> popu.dat 
 
         # 5. Calculate nonadiabatic coupling 
-        nonadCoup=() 
-        sed -n '105, 254 p' $pt_i.p > coupling.tmp 
-        for ((state_i=1;state_i<=$nstate;state_i++))
+        nonadCoup=()        
+        sed -n "$line_nonad_i, $line_nonad_f p" $pt_i.p > coupling.tmp 
+        for (( nonad_i=1; nonad_i<=$n_nonad; nonad_i++ ))
         do 
-            c_i=$(( ($state_i -1) * $natom * 3 + 1))
-            c_f=$(( $state_i * $natom * 3 ))
+            c_i=$(( 1 + $n_dof * ($nonad_i -1) ))
+            c_f=$(( $n_dof * $nonad_i ))
             sed -n "$c_i, $c_f p" coupling.tmp | awk '{print $1}' > coupling_element.tmp 
             coup_tot=0
             for elem in `cat coupling_element.tmp`
             do 
                 coup_tot=$( awk "BEGIN {print $coup_tot + ($elem)^2}" )
             done 
+            coup_tot=$( awk "BEGIN {print sqrt($coup_tot)}" )
             nonadCoup+=( $coup_tot )
         done
         echo $t_i ${nonadCoup[@]} >> nonadCoup.dat 
