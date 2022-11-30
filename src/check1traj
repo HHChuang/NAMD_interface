@@ -35,32 +35,32 @@ function main(){
     rootName=($2)
     tarDir=$3
 
-    # Extract variables from testfile ($rootName.0)
+    # Extract variables from testfile ($rootName.1)
     cd  $home/$orderedSubDir
-    get_var $rootName.0
+    get_var $rootName.1
 
-    # for ((subdir=0;subdir<${#orderedSubDir[@]};subdir++))
-    # do 
-    #     cd $home/${orderedSubDir[$subdir]}
-    #     echo ${orderedSubDir[$subdir]}
-    #     genList ${rootName[$subdir]} $nstate # output: ordered_list.dat 
-    #     checkOut ordered_list.dat 
-    #     echo '--------------------------------------'
-    # done 
+    for ((subdir=0;subdir<${#orderedSubDir[@]};subdir++))
+    do 
+        cd $home/${orderedSubDir[$subdir]}
+        echo ${orderedSubDir[$subdir]}
+        genList ${rootName[$subdir]} $nstate # output: ordered_list.dat 
+        checkOut ordered_list.dat 
+        echo '--------------------------------------'
+    done 
 
-    # # 2. Extract desired information 
-    # # Copy alll necessary qchem files into target directory; separate metadata to avoid contaminating original qchem files. 
-    # # input: 
-    # #   1. $tarDir 
-    # #   2. ${orderedSubDir[@]}
-    # #   3. ordered_list.dat in each subdirectories  
-    # #   output directory: $tarDir (reordered qchem output files)
-    # cd $home 
-    # combineDir 
+    # 2. Extract desired information 
+    # Copy alll necessary qchem files into target directory; separate metadata to avoid contaminating original qchem files. 
+    # input: 
+    #   1. $tarDir 
+    #   2. ${orderedSubDir[@]}
+    #   3. ordered_list.dat in each subdirectories  
+    #   output directory: $tarDir (reordered qchem output files)
+    cd $home 
+    combineDir 
 
     # output: PE.dat, TE.dat, popu.dat, traj.xyz and Bonds.ang 
-    cd $home 
     processData $tarDir 
+    cd $home 
 
 }
 
@@ -149,7 +149,7 @@ function combineDir(){
 
         cp $home/${orderedSubDir[$dir]}/${rootName[$dir]}*.te $home/$tarDir
 
-        cp $home/${orderedSubDir[$dir]}/${rootName[$dir]}*.p $home/$tarDir
+        cp $home/${orderedSubDir[$dir]}/${rootName[$dir]}*.1 $home/$tarDir
 
         # rename and reorder each point
         cd $home/$tarDir 
@@ -157,7 +157,7 @@ function combineDir(){
         do 
             mv $name\_nonad.out $totnpt.out 
             mv $name.te $totnpt.te 
-            mv $name.p $totnpt.p
+            mv $name.1 $totnpt.1
             totnpt=$(($totnpt + 1 ))
         done  
 
@@ -186,10 +186,11 @@ function processData(){
 
     calcT=$(echo "scale=6; $tstep * $time2fs " | bc -l )
 
-    # set parameters for extracting nonadiabatic coupling; testfile: 0.p
-    tmp=$(grep -n 'Coupling vector' 0.p| cut -d ':' -f 1 )
+    # set parameters for extracting nonadiabatic coupling; 
+    testfile='0.1'
+    tmp=$(awk ' !NF { printf sep NR ; sep=" " } END { printf "\n" }' $testfile | awk '{print $6}' )
     line_nonad_i=$(( $tmp +1 ))
-    line_nonad_f=$(wc -l 0.p | cut -d ' ' -f 1 ) 
+    line_nonad_f=$(wc -l $testfile | cut -d ' ' -f 1 ) 
     n_nonad=$(( $nstate * ($nstate - 1) / 2 ))
     n_dof=$(( $natom * 3 ))
     # formating header for nonadCoup.dat 
@@ -224,7 +225,7 @@ function processData(){
 
         # 4. Calculate population 
         popu=()
-        sed -n "$((7+2*$natom)),$((6+2*$natom+$nstate)) p" $pt_i.p | sed 's/(//g' | sed 's/)//g' | sed 's/,/ /g' > popu.tmp
+        sed -n "$((7+2*$natom)),$((6+2*$natom+$nstate)) p" $pt_i.1 | sed 's/(//g' | sed 's/)//g' | sed 's/,/ /g' > popu.tmp
         for ((state_i=1;state_i<=$nstate;state_i++))
         do 
             popu_re=$(sed -n "$state_i,$state_i p" popu.tmp | awk '{print $1}')
@@ -234,13 +235,13 @@ function processData(){
         echo $t_i ${popu[@]} >> popu.dat 
 
         # 5. Calculate nonadiabatic coupling 
-        nonadCoup=()        
-        sed -n "$line_nonad_i, $line_nonad_f p" $pt_i.p > coupling.tmp 
+        nonadCoup=()    
+        sed -n "$line_nonad_i, $line_nonad_f p" $pt_i.1 | awk '{print $1}' > coupling.tmp 
         for (( nonad_i=1; nonad_i<=$n_nonad; nonad_i++ ))
         do 
             c_i=$(( 1 + $n_dof * ($nonad_i -1) ))
             c_f=$(( $n_dof * $nonad_i ))
-            sed -n "$c_i, $c_f p" coupling.tmp | awk '{print $1}' > coupling_element.tmp 
+            sed -n "$c_i, $c_f p" coupling.tmp  > coupling_element.tmp 
             coup_tot=0
             for elem in `cat coupling_element.tmp`
             do 
@@ -254,8 +255,7 @@ function processData(){
     done 
     rm -f coord.tmp popu.tmp coupling.tmp coupling_element.tmp 
     # clean metafiles
-    rm -f *.out *.p *.te ordered_list.dat
-    cd $home 
+    rm -f *.out *.1 *.te ordered_list.dat
 }
 
 function genBondsFile(){

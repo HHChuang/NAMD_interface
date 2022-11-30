@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # Purpose: 
-#   In the current directory with the PATH as $home, execute script runNAMD_head_chmlin38 in the selected subdirectories which are listed in the input argument.
+#   In the current directory with the PATH as $home, execute script runNAMD_head in the selected subdirectories which are listed in the input argument.
 #   
 #   If the selected directory only has only one file (molecular position and momentum file with the file extension as '.iniPM', then it goes to the first mode which calculate the initial electronic wavefunction, or it goes to the second mode which read the existed electronic wavefunction.)
 # 
@@ -12,7 +12,7 @@
 #   $2 = time step in a.u. 
 # 
 # Pre-requist: 
-#   ~/bin/runNAMD_head_chmlin38
+#   ~/bin/runNAMD_head
 # 
 #     2022/08/22, Grace, H.G.Chuang@leeds.ac.uk
 # 

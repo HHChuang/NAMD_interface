@@ -3,7 +3,8 @@
 # 
 #   Purpose: 
 #       Use Multiconfigurational Ehrenfest dynamics and QChem 
-#   (SF-TDDFT) for nonadiabatic molecular dynamic simulation. 
+#   (SF-TDDFT) for nonadiabatic molecular dynamic simulation on 
+#   HPC platform (ARC4). 
 # 
 #   Input:   
 #       $1 = first point of trajectory 
@@ -16,16 +17,16 @@
 #       1. EST: QChem program 
 #       2. Nuclear parts: prop_prelim.x and prop_corr.x 
 # 
-#     2022/07/06, Grace, H.G.Chuang@leeds.ac.uk
+#     2022/11/30, Grace, H.G.Chuang@leeds.ac.uk
 # 
 ################################################################
 
 function main(){
     # 1. Check environmental variables
     source ~/.bashrc
-    qchemProg="$QC/exe/qcprog.exe_s"
-    propPrelim="/localhome/chmhch/bin/prop_prelim.x"
-    propCorr="/localhome/chmhch/bin/prop_corr.x"
+    qchemProg="qchem"
+    propPrelim="/home/home02/chmhch/NAMD_src/prop_prelim.x"
+    propCorr="/home/home02/chmhch/NAMD_src/prop_corr.x"
 
     # 2. Set parameters (global variables in bash shell script)
     setParameters $@
