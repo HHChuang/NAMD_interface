@@ -3,13 +3,12 @@
 # 
 #   Purpose: 
 #       Use Multiconfigurational Ehrenfest dynamics and QChem 
-#   (SF-TDDFT) for nonadiabatic molecular dynamic simulation on 
-#   HPC platform (ARC4). 
+#   (SF-TDDFT) for nonadiabatic molecular dynamic simulation  
+#   on HPC platform (ARC4). 
 # 
 #   Input:   
 #       $1 = first point of trajectory 
-#           1. *.iniPM (coordinate and momentum in a.u.)
-#           2. *_nonad.out (QChem output file)
+#           *.iniPM (coordinate and momentum in a.u.)
 # 
 #       $2 = time step in a.u. (10. or 2.5)
 # 
@@ -22,9 +21,8 @@
 ################################################################
 
 function main(){
-    # 1. Check environmental variables
-    source ~/.bashrc
-    qchemProg="qchem"
+    # 1. Set path for binary files 
+    qchemProg='qchem'
     propPrelim="/home/home02/chmhch/NAMD_src/prop_prelim.x"
     propCorr="/home/home02/chmhch/NAMD_src/prop_corr.x"
 
@@ -34,42 +32,34 @@ function main(){
     # 3. Propagate trajectory 
     if [ $fileExten == 'iniPM' ] # 3.1 Start from molecular position and momentum 
     then 
-        # Calculate the first electronic wavefunction (WF) and propagate the first nuclear geometry.
+        # 
+        # Calculate the first point for its electronic wavefunction (WF) and then propagate the nuclear geometry.
+        # 
         # input: 
-        #       $*,iniPM 
+        #       $1,iniPM 
         # output: 
-        #       $*.0, $*.p, $*.1, ${*}.out, $*_WF 
-        gen1stDynamicFile $rootName 
+        #       $1.1 and /$1_WF
+        # metadata: 
+        #       $1.0, $1.p, ${1}.out 
+        # 
+        calc1stPT_SGE $rootName
 
         # Based on the previous WF, propagate molecule by reading WF with new generated structure one-by-one. 
-        propTraj $rootName 
+        propTraj_SGE $rootName 
+        
     elif [ $fileExten == 'out' ] # 3.2 Start from existed WF and molecular geometry. 
     then 
-        propTraj $rootName 
+        propTraj_SGE $rootName 
     else 
         echo 'Wrong file extension, stop program.'
         exit 
     fi 
 }
 
+
 function setParameters(){
     # Check if the input argument exist or not.
     [ "$1" == "" ] && echo "File $1 is not exist, stop program." && exit
-
-
-    # Nuclear dynamic setting 
-    natom=9
-    nstat=7
-    nbranch=0
-    time_ini=0.
-    timestep=$2  # a.u., 2.4189 * 10^-17 
-    if [ $timestep == '10.' ]
-    then 
-        tot_nsteps=900
-    elif [ $timestep == '2.5' ]
-    then 
-        tot_nsteps=3000
-    fi 
 
     # Check the file extension 
     fileExten=$(echo $1 | cut -d '.' -f 2 )
@@ -85,69 +75,116 @@ function setParameters(){
         step_ini=$(echo $1 | cut -d _ -f 3)
     fi 
 
-    # Electroic setting 
+
+    # Nuclear dynamic setting 
+    natom=9
+    nstat=7
+    nbranch=0
+    time_ini=0.
+    timestep=$2  # a.u., 2.4189 * 10^-17 
+    bohr2ang=0.5292 # To be used in subroutine Bohr2Ang()
+    if [ $timestep == '10.' ]
+    then 
+        tot_nsteps=900
+    elif [ $timestep == '2.5' ]
+    then 
+        tot_nsteps=3000
+    fi 
+
+    
+    # Basic electroic structure setting 
     charge=0
     multi=3
     statlist=()
+    basis='6-31+G*'
+    dft='BHHLYP'
     for ((i=1; i <= $nstat; i++))
     do 
         statlist+=($i)
     done
 }
 
-function gen1stDynamicFile(){
-    # $1 = root of filename 
+
+function calc1stPT_SGE(){
+    # 
+    # Input:
+    #     $1 = root of filename 
+    # 
+    # Output: 
+    #     $1.1 and /$1_WF
+    # 
+    # Metafiles: 
+    #     Dynamics input files: 
+    #         $1.0, $1.p and $1.1 
+    # 
+
+    # Night steps to run the first point calculation: 
+
+    #     1. Extracting potision and momentum to form the header of dynamic file 
+    #         input: $1.iniPM 
+    #         output: $1.0 (header part)
     rootName=$1 
+    genDFheader $rootName.0 
 
-    # Step 1. First step of nuclear dynamics simulation; calculate EST information for nuclear propagation.
-    #   Input: 
-    #       Molecular coordinate and momentum 
-    #   Output: 
-    #       $1.0 
-    # echo $rootName.0 
+    #     2. Calculate non-adiabatic coupling.
+    #         program: Q-Chem 
+    #         input: $1_nonad.inp
+    #         output: $1_nonad.out and /$1_WF
 
-    echo "$natom $nstat   ! Number of atoms and number of states" > $rootName.0 
-    echo "$nbranch ! Branch number; 0 - no cloning " >> $rootName.0 
-    echo "$time_ini $timestep !Time and timestep " >> $rootName.0 
-    echo '! Positions' >> $rootName.0 
-    cat $rootName.iniPM >> $rootName.0
-    echo '!Ehrenfest amplitudes (complex numbers)'  >> $rootName.0
-    echo '0.0000000000000000E+00' >> $rootName.0
-    echo '0.0000000000000000E+00' >> $rootName.0
-    echo '0.0000000000000000E+00' >> $rootName.0
-    echo '0.1000000000000000E+01' >> $rootName.0
-    echo '0.0000000000000000E+00' >> $rootName.0
-    echo '0.0000000000000000E+00' >> $rootName.0
-    echo '0.0000000000000000E+00' >> $rootName.0
-    echo '!Potential energies, #state' >> $rootName.0
-
-    # Step 1.1 Calculate nonadiabatic coupling, and calculate and store the WF for the following process. 
     calcQChemNonad $rootName SAD $rootName.0  
 
-    # Step 1.2. Force calculation in different excited state 
+    #     3. Calculate force in different electronic states. 
+    #         program: Q-Chem
+    #         input: $1_force_*.inp 
+    #         output: $1_force_*.out and /$1_WF
     for (( i=1;i<= $nstat;i++ ))
     do 
         calcQChemForce $rootName $i $1.0
     done 
 
-    # Step 1.3 Add EST data to the dynamic calculation input file 
-    grep 'Total energy for state ' $rootName\_nonad.out \
-        | awk '{print $6, $5}' | sed 's/://g' | head -n $nstat >> $rootName.0
-    
-    get_force $rootName.0 $rootName\_force 
-    get_nonad $rootName.0 $rootName\_nonad.out 
+    #     4. Extract EST information to 
+    #         input: $1_nonad.out and $1_force_*.out 
+    #         output: $1.0 (completed) 
+    genDFtail $rootName $rootName.0 
 
-    # Step 2. Second and third step of nuclear dynamics simulation; call $propPrelim and $propCorr for nuclear propagation. 
-    #   Input: 
-    #       $1.0
-    #   Output: 
-    #       $1.p, $1.1
-    prop1PT $1 
+    #     5. Nuclear preliminary propagation 
+    #         program: prop_prelim.x
+    #         input: $1.0 
+    #         output: $1.p 
+    $propPrelim $rootName # input: $1.0, output: $1.p
+
+    #     6. Calculate non-adiabatic coupling.
+    #         program: Q-Chem
+    #         input: $1_nonad.inp
+    #         output: $1_nonad.out and /$1_WF
+    calcQChemNonad $rootName Read $rootName.p
+            
+    #     7. Calculate force in different electronic states. 
+    #         program: Q-Chem
+    #         input: $1_force_*.inp 
+    #         output: $1_force_*.out and /$1_WF
+    for (( i=1;i<= $nstat;i++ ))
+    do 
+        calcQChemForce $rootName $i $rootName.p
+    done
+
+    #     8. Extract EST information to 
+    #         input: $1_nonad.out and $1_force_*.out 
+    #         output: $1.p (completed) 
+    genDFtail $rootName $rootName.p
+
+    #     9. Final nuclrar propagation 
+    #         program: prop_corr.x 
+    #         input: $1.p 
+    #         output: $1.1 
+    $propCoor $rootName 
 }
 
-function propTraj(){
+
+function propTraj_SGE(){
+    # 
     #   Input:
-    #     $1 = rootName of all files
+    #     $1 = rootof filename
     # 
     #   Output: 
     #     1. $rootName.1
@@ -156,7 +193,9 @@ function propTraj(){
     #     4. /$rootName\_WF
     # 
 
-    # Set parameters
+    # 
+    # 1. Set parameters
+    # 
     rootName=$1
     nameWFDir=($rootName\_WF) # Store the directory name of electronic wavefunctions (WF)
     nwfDir=3 # maximum number of stored WF 
@@ -167,30 +206,35 @@ function propTraj(){
         pt_name_i=$rootName\_$(($step_ini - 1 )) 
     fi 
 
-    # Calculate the first $nwfDir points in order to store electronic wavefunctions
+    # 
+    # 2. Calculate the first $nwfDir points in order to store electronic wavefunctions
+    # 
     for (( step_i=$step_ini;step_i<=$(($step_ini + $nwfDir));step_i++ ))
     do 
         pt_name=$rootName\_$step_i
         cp $pt_name_i.1 $pt_name.0
         cp -r $pt_name_i\_WF $pt_name\_WF
-        prop1PT $pt_name Read
+        prop1PT_SGE $pt_name Read
         pt_name_i=$pt_name 
         nameWFDir+=($pt_name\_WF)
     done 
 
-    # Keep replacing the stored WFs, and then propagate molecule.
+    # 
+    # 3. Keep replacing the stored WFs, and then propagate molecule.
+    # 
     for (( step_i=$(($step_ini + $nwfDir + 1));step_i<=$tot_nsteps;step_i++ ))
     do 
         pt_name=$rootName\_$step_i
         cp $pt_name_i.1 $pt_name.0
         cp -r $pt_name_i\_WF $pt_name\_WF
-        prop1PT $pt_name Read
+        prop1PT_SGE $pt_name Read
         pt_name_i=$pt_name 
         nameWFDir+=($rootName\_$(($step_i-$nwfDir))\_WF)
         echo ${nameWFDir[@]} | xargs rm -rf 
     done 
     rm -f qchemOption.tmp tmp.tmp 
 }
+
 
 function calcQChemNonad(){
     # $1 = root of QChem file name 
@@ -200,9 +244,11 @@ function calcQChemNonad(){
     name_n=$1\_nonad
     qchemOptionNonad $2 # output: qchemOption.tmp
     genqchemInp  $name_n $3 qchemOption.tmp
-    $qchemProg $name_n.inp $1\_WF > $name_n.out
-    check_calc $1\_WF $name_n
+    qsubSGEfile $name_n $1 # output: $name_n.out, /$1_WF
+    check_calc $name_n $1
+    rm -f qchemOption.tmp 
 }
+
 
 function calcQChemForce(){
     # $1 = root of QChem file name 
@@ -212,48 +258,102 @@ function calcQChemForce(){
     name_f=$1\_force\_$2
     qchemOptionForce $2 # output: qchemOption.tmp
     genqchemInp  $name_f $3 qchemOption.tmp
-    $qchemProg $name_f.inp $1\_WF > $name_f.out
-    check_calc $1\_WF $name_f
+    qsubSGEfile $name_f $1 # output: $name_f.out, /$1_WF
+    check_calc $name_f $1
+    rm -f qchemOption.tmp 
 }
 
-function prop1PT(){
-    # '''
+
+function prop1PT_SGE(){
+    # 
+    #   Input:
     #     $1 = root of filename 
-    #     output:
+    # 
+    #   Output:
     #         $1.1
-    # '''
+    # 
      
-    # Step 1. Dynamic preliminary calculation
-    $propPrelim $1 # input: $1.0, output: $1.p
+    rootName=$1 
 
-    # Step 2. Electronic structure calculation
-    # Step 2.1. Nonadiabatic calculation
-    #   calculate electronic energy and store WF 
-    calcQChemNonad $1 Read $1.p
+    #     1. Nuclear preliminary propagation 
+    #         program: prop_prelim.x
+    #         input: $1.0 
+    #         output: $1.p 
+    $propPrelim $rootName 
 
-    # Step 2.2. Force calculation in different excited state
+    #     2. Calculate non-adiabatic coupling.
+    #         program: Q-Chem
+    #         input: $1_nonad.inp
+    #         output: $1_nonad.out and /$1_WF
+    calcQChemNonad $rootName Read $rootName.p
+            
+    #     3. Calculate force in different electronic states. 
+    #         program: Q-Chem
+    #         input: $1_force_*.inp 
+    #         output: $1_force_*.out and /$1_WF
     for (( i=1;i<= $nstat;i++ ))
     do 
-        calcQChemForce $1 $i $1.p
-    done 
+        calcQChemForce $rootName $i $rootName.p
+    done
 
-    # Step 2.3 Add EST data to the dynamic calculation input file 
-    # echo '!Potential energies, #state' >> $1.p
-    grep 'Total energy for state ' $1\_nonad.out \
-        | awk '{print $6, $5}' | sed 's/://g' | head -n $nstat >> $1.p
-    
-    get_force $1.p $1\_force 
-    get_nonad $1.p $1\_nonad.out 
+    #     4. Extract EST information to 
+    #         input: $1_nonad.out and $1_force_*.out 
+    #         output: $1.p (completed) 
+    genDFtail $rootName $rootName.p
 
-    
-    # Step 3. Correction of dynamic information
-    # Correct final momenta and Ehrenfest amplitudes using electronic structure data from both initial and final point
-    $propCorr $1 # output: $1.1
+    #     5. Final nuclrar propagation 
+    #         program: prop_corr.x 
+    #         input: $1.p 
+    #         output: $1.1 
+    $propCoor $rootName 
+
 }
 
+
+function genDFheader(){
+    # 
+    # Input:
+    #   $1 = file name 
+    # 
+
+    echo "$natom $nstat   ! Number of atoms and number of states" > $1 
+    echo "$nbranch ! Branch number; 0 - no cloning " >> $1 
+    echo "$time_ini $timestep !Time and timestep " >> $1 
+    echo '! Positions' >> $1 
+    cat $rootName.iniPM >> $1
+    echo '!Ehrenfest amplitudes (complex numbers)'  >> $1
+    echo '0.0000000000000000E+00' >> $1
+    echo '0.0000000000000000E+00' >> $1
+    echo '0.0000000000000000E+00' >> $1
+    echo '0.0000000000000000E+00' >> $1
+    echo '0.1000000000000000E+01' >> $1
+    echo '0.0000000000000000E+00' >> $1
+    echo '0.0000000000000000E+00' >> $1
+    echo '!Potential energies, #state' >> $1
+}
+
+
+function genDFtail(){
+    # Input:
+    #   $1 = root of file name 
+    #   $2 = name of outupt file 
+
+    rootName=$1 
+
+    grep 'Total energy for state ' $rootName\_nonad.out \
+        | awk '{print $6, $5}' | sed 's/://g' | head -n $nstat >> $2
+    
+    get_force $2 $rootName\_force 
+    get_nonad $2 $rootName\_nonad.out 
+}
+
+
 function get_nonad(){
-    # $1 = name of input for dynamic calculation
-    # $2 = name of QChem output file 
+    # 
+    # Input: 
+    #       $1 = name of input for dynamic calculation
+    #       $2 = name of QChem output file 
+    # 
 
     name=$1
     name_nonad=$2 
@@ -285,11 +385,13 @@ function get_nonad(){
     rm -f coupling.tmp 
 }
 
+
 function get_force(){
-    # '''
-    #     $1 = name of input for dynamic calculation
-    #     $2 = root name of QChem output file 
-    # '''
+    # 
+    # Input:
+    #       $1 = name of input for dynamic calculation
+    #       $2 = root name of QChem output file 
+    # 
     
     name=$1
     name_force=$2 
@@ -332,6 +434,7 @@ function get_force(){
     rm -f totforce.tmp force.tmp 
 }
 
+
 function genqchemInp(){
     # '''
     #     $1 = name of the file
@@ -353,40 +456,43 @@ cat $3 >> $1.inp
 rm -f atomlist.tmp geom_bohr.tmp geom_ang.tmp 
 }
 
-function testBL(){
-    # input: 
-    #   $1 = *.1; dynamic information input fule
 
-    Bohr2Ang $1 # output: geom_ang.tmp 
-    genBondsFile geom_ang.tmp # output: ${Bonds[@]}
+function qsubSGEfile(){
+    # 
+    # Input: 
+    #       $1 = name of qchem file  
+    #       $2 = root of file name 
+    # 
 
-    # test all C-H bond length; larger than 5, return 1
-    nCH_5=0 
-    for ((bond_i=0;bond_i<4;bond_i++))
-    do 
-        BLint=$(echo ${Bonds[$bond_i]} | cut -d '.' -f 1 ) 
-        if [[ $BLint -gt 5  ||  $BLint -eq 5 ]]
-        then 
-            nCH_5=$(($nCH_5 + 1 ))
-        fi 
-    done 
+cat << EOF > $2.sge
+#!/bin/bash 
 
-    if [ $nCH_5 -gt 1 ] 
-    then 
-        echo 1 # 2 CH bonds are larger than 5 angstrom 
-    else 
-        echo 0 
-    fi 
+# SGE environment setting 
+#$ -cwd -V 
+#$ -j y # combine std-out and std-err
+#$ -l h_rt=48:0:0 
+
+# Q-Chem environment setting 
+module add test qchem 
+
+qchem $1.inp $1.out $2_WF
+
+EOF
+
+qsub -sync y $2.sge
 
 }
 
-function Bohr2Ang(){
-    # input:
-    #   $1 = *.1 ; dynamic information input fule
-    # output: 
-    #   geom_ang.tmp 
 
-    bohr2ang=0.5292
+function Bohr2Ang(){
+    # 
+    # Input:
+    #   $1 = *.1 ; dynamic information input fule
+    # 
+    # Output: 
+    #   geom_ang.tmp 
+    # 
+
     sed -n "5, $((4 + $natom)) p" $1 | awk '{print $1}' > atomlist.tmp 
     sed -n "5, $((4 + $natom)) p" $1 | awk '{print $2, $3, $4}' > geom_bohr.tmp 
     rm -f geom_ang.tmp 
@@ -403,67 +509,6 @@ function Bohr2Ang(){
 
 }
 
-function genBondsFile(){
-    # intput:
-    #   $1 = geom_ang.tmp 
-    # output: 
-    #   ${Bonds[@]}
-
-    coord=()
-    for ((coord_i=1;coord_i<=$natom;coord_i++))
-    do 
-        coord+=($(sed -n "$coord_i,$coord_i p" $1 | awk '{print $1}'))
-        coord+=($(sed -n "$coord_i,$coord_i p" $1 | awk '{print $2}'))
-        coord+=($(sed -n "$coord_i,$coord_i p" $1 | awk '{print $3}'))
-    done 
-    C=( $(echo ${coord[@]:0:3}) )
-    H1=( $(echo ${coord[@]:3:3}) )
-    H2=( $(echo ${coord[@]:6:3}) )
-    H3=( $(echo ${coord[@]:9:3}) )
-    H4=( $(echo ${coord[@]:12:3}) )
-
-    Bonds=() 
-    Bonds+=($(calcBL ${C[@]} ${H1[@]} ))
-    Bonds+=($(calcBL ${C[@]} ${H2[@]} ))
-    Bonds+=($(calcBL ${C[@]} ${H3[@]} ))
-    Bonds+=($(calcBL ${C[@]} ${H4[@]} ))
-    Bonds+=($(calcBL ${H1[@]} ${H2[@]} ))
-    Bonds+=($(calcBL ${H1[@]} ${H3[@]} ))
-    Bonds+=($(calcBL ${H1[@]} ${H4[@]} ))
-    Bonds+=($(calcBL ${H2[@]} ${H3[@]} ))
-    Bonds+=($(calcBL ${H2[@]} ${H4[@]} ))
-    Bonds+=($(calcBL ${H3[@]} ${H4[@]} ))
-}
-
-function calcBL(){
-    # $1 - $3 = first atom
-    # $4 - $6 = second atom
-    # output: bond length between atom1 and atom2
-
-    atom1=() 
-    atom1+=($1)
-    atom1+=($2)
-    atom1+=($3)
-    atom2=() 
-    atom2+=($4)
-    atom2+=($5)
-    atom2+=($6)
-
-    BL12=()
-    for ((coord_i=0;coord_i<3;coord_i++))
-    do 
-        minusSign=$(echo ${atom2[$coord_i]} | grep -c '-')
-        if [ $minusSign == 0 ]
-        then 
-            BL12+=($(echo "scale=4;(${atom1[$coord_i]}-${atom2[$coord_i]})^2 "|bc -l))
-        else
-            num2=$(echo ${atom2[$coord_i]} | sed 's/-//g')
-            BL12+=($(echo "scale=4;(${atom1[$coord_i]} + $num2 )^2 "|bc -l))
-        fi 
-    done 
-
-    echo "scale=4;sqrt(${BL12[0]} + ${BL12[1]} + ${BL12[2]})"| bc -l
-}
 
 function qchemOptionNonad(){
     # $1 = Read or SAD
@@ -497,6 +542,7 @@ cat << EOF > qchemOption.tmp
 EOF
 }
 
+
 function qchemOptionForce(){
     # $1 = idx. of state 
 cat << EOF > qchemOption.tmp
@@ -523,28 +569,29 @@ cat << EOF > qchemOption.tmp
 EOF
 }
 
-function check_calc(){
-    # $1 = directory to storing wavefunction 
-    # $2 = name of the file 
 
-    num=$(grep -c 'Thank you very much for using Q-Chem' $2.out )
+function check_calc(){
+    # $1 = name of the qchem file 
+    # $2 = root of file name 
+
+    num=$(grep -c 'Thank you very much for using Q-Chem' $1.out )
     if [ $num -eq 0 ]
     then
-        err=$(grep -c 'SCF failed to converge' $2.out )
+        err=$(grep -c 'SCF failed to converge' $1.out )
         if [ $err -eq 1 ]
         then
             echo 'Change SCF algorithm to GDM'
-            sed -i 's/DIIS/GDM/g' $2.inp
-            $qchemProg $2.inp $1 > $2.out
+            sed -i 's/DIIS/GDM/g' $1.inp
+            qsubSGEfile $1.inp $2 
             return 0
         else
-            echo "Failed Q-Chem output: $2.out" 
+            echo "Failed Q-Chem output: $1.out" 
             exit 1 
             # echo "Failed Q-Chem output; mix 10% orb in SCF and then rerun $1.inp"
             # sed -i 's/SCF_GUESS           Read/SCF_GUESS           Read \n SCF_GUESS_MIX 3/' $1.inp 
         fi
     else 
-        echo $2.out
+        echo $1.out
         return 1 
     fi
 }
