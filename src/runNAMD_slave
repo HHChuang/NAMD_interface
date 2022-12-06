@@ -2,15 +2,16 @@
 ################################################################
 # 
 #   Purpose: 
-#       Use Multiconfigurational Ehrenfest dynamics and QChem 
-#   (SF-TDDFT) for nonadiabatic molecular dynamic simulation  
-#   on HPC platform (ARC4). 
+#       Use Multiconfigurational Ehrenfest dynamics (AIMD) and  
+#   Q-Chem (SF-TDDFT) for nonadiabatic molecular dynamic   
+#   simulation on HPC platform. 
 # 
 #   Input:   
 #       $1 = first point of trajectory 
 #           *.iniPM (coordinate and momentum in a.u.)
 # 
 #       $2 = time step in a.u. (10. or 2.5)
+#       $3 = 0 or 1, 0 = no cloning, 1 = have cloning
 # 
 #   Pre-requested:
 #       1. EST: QChem program 
@@ -21,15 +22,10 @@
 ################################################################
 
 function main(){
-    # 1. Set path for binary files 
-    qchemProg='qchem'
-    propPrelim="/home/home02/chmhch/NAMD_src/prop_prelim.x"
-    propCorr="/home/home02/chmhch/NAMD_src/prop_corr.x"
-
-    # 2. Set parameters (global variables in bash shell script)
+    # 1. Set parameters (global variables in bash shell script)
     setParameters $@
 
-    # 3. Propagate trajectory 
+    # 2. Propagate trajectory 
     if [ $fileExten == 'iniPM' ] # 3.1 Start from molecular position and momentum 
     then 
         # 
@@ -46,7 +42,7 @@ function main(){
 
         # Based on the previous WF, propagate molecule by reading WF with new generated structure one-by-one. 
         propTraj_SGE $rootName 
-        
+
     elif [ $fileExten == 'out' ] # 3.2 Start from existed WF and molecular geometry. 
     then 
         propTraj_SGE $rootName 
@@ -75,11 +71,17 @@ function setParameters(){
         step_ini=$(echo $1 | cut -d _ -f 3)
     fi 
 
+    # Set path for binary files 
+    qchemProg='qchem'
+    propPrelim="/home/home02/chmhch/NAMD_src/prop_prelim.x"
+    propCorr="/home/home02/chmhch/NAMD_src/prop_corr.x"
+    propCoor_clon="/home/home02/chmhch/NAMD_src/prop_corr_clon.x"
 
     # Nuclear dynamic setting 
     natom=9
     nstat=7
-    nbranch=0
+    ini_stat=5 # 0 = ground state
+    nbranch=$3 # binary: 0 = no cloning,  1 = start cloning 
     time_ini=0.
     timestep=$2  # a.u., 2.4189 * 10^-17 
     bohr2ang=0.5292 # To be used in subroutine Bohr2Ang()
@@ -91,6 +93,10 @@ function setParameters(){
         tot_nsteps=3000
     fi 
 
+    if [ $nbranch == 1 ]
+    then 
+        propCoor=$propCoor_clon
+    fi 
     
     # Basic electroic structure setting 
     charge=0
@@ -177,7 +183,7 @@ function calc1stPT_SGE(){
     #         program: prop_corr.x 
     #         input: $1.p 
     #         output: $1.1 
-    $propCoor $rootName 
+    $propCorr $rootName 
 }
 
 
@@ -196,14 +202,14 @@ function propTraj_SGE(){
     # 
     # 1. Set parameters
     # 
-    rootName=$1
-    nameWFDir=($rootName\_WF) # Store the directory name of electronic wavefunctions (WF)
+    RootName=$1
+    nameWFDir=($RootName\_WF) # Store the directory name of electronic wavefunctions (WF)
     nwfDir=3 # maximum number of stored WF 
     if [ $step_ini == 1 ] 
     then 
-        pt_name_i=$rootName
+        pt_name_i=$RootName
     else 
-        pt_name_i=$rootName\_$(($step_ini - 1 )) 
+        pt_name_i=$RootName\_$(($step_ini - 1 )) 
     fi 
 
     # 
@@ -211,10 +217,11 @@ function propTraj_SGE(){
     # 
     for (( step_i=$step_ini;step_i<=$(($step_ini + $nwfDir));step_i++ ))
     do 
-        pt_name=$rootName\_$step_i
+        pt_name=$RootName\_$step_i
         cp $pt_name_i.1 $pt_name.0
         cp -r $pt_name_i\_WF $pt_name\_WF
         prop1PT_SGE $pt_name Read
+        check_clon $pt_name 
         pt_name_i=$pt_name 
         nameWFDir+=($pt_name\_WF)
     done 
@@ -224,12 +231,12 @@ function propTraj_SGE(){
     # 
     for (( step_i=$(($step_ini + $nwfDir + 1));step_i<=$tot_nsteps;step_i++ ))
     do 
-        pt_name=$rootName\_$step_i
+        pt_name=$RootName\_$step_i
         cp $pt_name_i.1 $pt_name.0
         cp -r $pt_name_i\_WF $pt_name\_WF
         prop1PT_SGE $pt_name Read
         pt_name_i=$pt_name 
-        nameWFDir+=($rootName\_$(($step_i-$nwfDir))\_WF)
+        nameWFDir+=($RootName\_$(($step_i-$nwfDir))\_WF)
         echo ${nameWFDir[@]} | xargs rm -rf 
     done 
     rm -f qchemOption.tmp tmp.tmp 
@@ -303,9 +310,9 @@ function prop1PT_SGE(){
 
     #     5. Final nuclrar propagation 
     #         program: prop_corr.x 
-    #         input: $1.p 
-    #         output: $1.1 
-    $propCoor $rootName 
+    #         input: $1.0 and $1.p 
+    #         output: $1.1 or $1.1 and $1.2 for cloning
+    $propCorr $rootName 
 
 }
 
@@ -322,13 +329,15 @@ function genDFheader(){
     echo '! Positions' >> $1 
     cat $rootName.iniPM >> $1
     echo '!Ehrenfest amplitudes (complex numbers)'  >> $1
-    echo '0.0000000000000000E+00' >> $1
-    echo '0.0000000000000000E+00' >> $1
-    echo '0.0000000000000000E+00' >> $1
-    echo '0.0000000000000000E+00' >> $1
-    echo '0.1000000000000000E+01' >> $1
-    echo '0.0000000000000000E+00' >> $1
-    echo '0.0000000000000000E+00' >> $1
+    for ((i=0;i<$nstat;i++))
+    do 
+        if [ i == $ini_stat ]
+        then
+             echo '0.1000000000000000E+01' >> $1
+        else 
+            echo '0.0000000000000000E+00' >> $1
+        fi 
+    done 
     echo '!Potential energies, #state' >> $1
 }
 
@@ -365,10 +374,8 @@ function get_nonad(){
     do 
         for ((j=$i+1; j<=$nstat; j++))
         do
-            echo $i,$j,$((4 + $k*($natom+4) )), $((3+$natom + $k*($natom+4) ))
             grep -A $(($natom + 2 )) 'derivative coupling without ' $name_nonad \
             | sed -n "$((4 + $k*($natom+4) )), $((3+$natom + $k*($natom+4) )) p" | awk '{print $2,$3,$4}' > coupling.tmp 
-            cat coupling.tmp 
             component=1
             for ((na=1; na<=$natom; na++))
             do 
@@ -475,8 +482,23 @@ cat << EOF > $2.sge
 # Q-Chem environment setting 
 module add test qchem 
 
+# Initial time 
+t_i=\$(echo `date` | awk '{print \$4}')
+t_i_h=\$(echo \$t_i |  cut -d ':' -f 1)
+t_i_m=\$(echo \$t_i |  cut -d ':' -f 2)
+t_i_s=\$(echo \$t_i |  cut -d ':' -f 3)
+
 qchem $1.inp $1.out $2_WF
 
+# Final time 
+t_f=\$(echo `date` | awk '{print \$4}')
+t_f_h=\$(echo \$t_f |  cut -d ':' -f 1)
+t_f_m=\$(echo \$t_f |  cut -d ':' -f 2)
+t_f_s=\$(echo \$t_f |  cut -d ':' -f 3)
+
+# Time of calculation 
+t=\$(( (\$t_f_h - \$t_i_h)*60*60 + (\$t_f_m - \$t_i_m)*60 + (\$t_f_s - \$t_i_s) )) 
+echo "Time of calc.: \$t sec."
 EOF
 
 qsub -sync y $2.sge
@@ -542,7 +564,6 @@ cat << EOF > qchemOption.tmp
 EOF
 }
 
-
 function qchemOptionForce(){
     # $1 = idx. of state 
 cat << EOF > qchemOption.tmp
@@ -596,4 +617,21 @@ function check_calc(){
     fi
 }
 
+
+function check_clon(){
+    # 
+    # Input: 
+    #   $1 = file name 
+    # 
+
+    checkname=$1 
+    if [ -f $checkname.2 ]
+    then 
+        echo "Cloning happens at $checkname"
+        filename=$(grep 'Branch number' $checkname.2 | awk '{print $1}')
+        mkdir ../$filename 
+        cp -r $checkname* ../$filename 
+        screen -d -m bash -c "cd ../$filename; $0 $checkname\_nonad.out $timestep"
+    fi 
+}
 main $@

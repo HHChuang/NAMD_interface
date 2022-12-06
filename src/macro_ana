@@ -1,7 +1,8 @@
 #!/bin/bash
 # 
-# $1 = list of directory name for analysing 
-# $2 = line number of the selected time frame (option)
+# Input:
+#       $1 = list of directory name for analysing 
+#       $2 = line number of the selected time frame (option)
 # 
 # Pre-request: 
 #   analOneProd: analyse the result of one single trajectory

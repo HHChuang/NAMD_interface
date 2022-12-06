@@ -69,22 +69,26 @@ function calcBody(){
                 echo $filename | sed "s/$fileRoot//g" >> restTraj.dat
             fi 
         
-            echo $filename $nfile $lastpt $finalTime 
+            printf "%-10s %-6s %-10s %-10s\n" $filename $nfile $lastpt $finalTime
         fi 
     done 
     rm -f fileList.tmp 
 }
 
 function printHeader(){
-    echo '--------------------------------'
+    head1='file' 
+    head2='nfiles'
+    head3='lastpoint' 
+    head4='time(fs)'
+    echo '-------------------------------------'
     echo "time step: $tstep a.u. "
-    echo 'file  nfiles lastpoint time(fs)'
-    echo '--------------------------------'
+    printf '%-10s %-6s %-10s %-10s\n' $head1 $head2 $head3 $head4 
+    echo '-------------------------------------'
 
 }
 
 function printStatic(){
-    echo '--------------------------------'
+    echo '-------------------------------------'
     echo ''
     echo 'Statistic result: workTraj.dat, fullTraj.dat, fail1pt.dat, restTraj.dat'
     echo "total: $workTraj " 
@@ -92,7 +96,7 @@ function printStatic(){
     echo "full: $fullTraj "
     echo "fail@1pt: $fail1pt" 
     echo "rest: $(( $workTraj - $fullTraj - $fail1pt)) "
-    echo '--------------------------------'
+    echo '-------------------------------------'
 }
 
 main $@
