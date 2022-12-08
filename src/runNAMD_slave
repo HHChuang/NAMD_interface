@@ -124,9 +124,9 @@ function calc1stPT_SGE(){
     #         $1.0, $1.p and $1.1 
     # 
 
-    # Night steps to run the first point calculation: 
+    # Nine steps to run the first point calculation: 
 
-    #     1. Extracting potision and momentum to form the header of dynamic file 
+    #     1. Extracting position and momentum to form the header of the dynamic file 
     #         input: $1.iniPM 
     #         output: $1.0 (header part)
     rootName=$1 
@@ -148,7 +148,7 @@ function calc1stPT_SGE(){
         calcQChemForce $rootName $i $1.0
     done 
 
-    #     4. Extract EST information to 
+    #     4. Extract EST information to complete the dynamic file.
     #         input: $1_nonad.out and $1_force_*.out 
     #         output: $1.0 (completed) 
     genDFtail $rootName $rootName.0 
@@ -174,12 +174,12 @@ function calc1stPT_SGE(){
         calcQChemForce $rootName $i $rootName.p
     done
 
-    #     8. Extract EST information to 
+    #     8. Extract EST information to write another dynamic file.
     #         input: $1_nonad.out and $1_force_*.out 
     #         output: $1.p (completed) 
     genDFtail $rootName $rootName.p
 
-    #     9. Final nuclrar propagation 
+    #     9. Final nuclear propagation 
     #         program: prop_corr.x 
     #         input: $1.p 
     #         output: $1.1 
@@ -308,7 +308,7 @@ function prop1PT_SGE(){
     #         output: $1.p (completed) 
     genDFtail $rootName $rootName.p
 
-    #     5. Final nuclrar propagation 
+    #     5. Final nuclear propagation 
     #         program: prop_corr.x 
     #         input: $1.0 and $1.p 
     #         output: $1.1 or $1.1 and $1.2 for cloning
@@ -475,30 +475,18 @@ cat << EOF > $2.sge
 #!/bin/bash 
 
 # SGE environment setting 
-#$ -cwd -V 
-#$ -j y # combine std-out and std-err
-#$ -l h_rt=48:0:0 
+#$ -cwd -V          # run with current set of modules and in the current dir. 
+#$ -j y             # combine std-out and std-err
+#$ -l h_vmem=4G     # request some memory per core
+#$ -l h_rt=0:15:0   # max 48 hours 
+#$ -pe smp 9
 
 # Q-Chem environment setting 
 module add test qchem 
 
-# Initial time 
-t_i=\$(echo `date` | awk '{print \$4}')
-t_i_h=\$(echo \$t_i |  cut -d ':' -f 1)
-t_i_m=\$(echo \$t_i |  cut -d ':' -f 2)
-t_i_s=\$(echo \$t_i |  cut -d ':' -f 3)
+time qchem -nt \$NSLOTS $1.inp $1.out $2_WF
 
-qchem $1.inp $1.out $2_WF
 
-# Final time 
-t_f=\$(echo `date` | awk '{print \$4}')
-t_f_h=\$(echo \$t_f |  cut -d ':' -f 1)
-t_f_m=\$(echo \$t_f |  cut -d ':' -f 2)
-t_f_s=\$(echo \$t_f |  cut -d ':' -f 3)
-
-# Time of calculation 
-t=\$(( (\$t_f_h - \$t_i_h)*60*60 + (\$t_f_m - \$t_i_m)*60 + (\$t_f_s - \$t_i_s) )) 
-echo "Time of calc.: \$t sec."
 EOF
 
 qsub -sync y $2.sge
@@ -634,4 +622,6 @@ function check_clon(){
         screen -d -m bash -c "cd ../$filename; $0 $checkname\_nonad.out $timestep"
     fi 
 }
+
+
 main $@

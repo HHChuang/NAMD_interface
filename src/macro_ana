@@ -10,7 +10,7 @@
 # 2022/08/19, Grace, H.G.Chuang@leeds.ac.uk
 #  
 
-fileRoot='anal_'
+fileRoot='ana_'
 
 function main(){
 

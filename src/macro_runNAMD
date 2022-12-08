@@ -53,24 +53,29 @@ function oneNode(){
         
         cd $home/$dirRoot$Fileidx
 
-        $runNAMD_prog $firstPt $tstep 
+        $runNAMD_prog $firstPt $tstep $nbranch
     done 
 
 }
 
 function manyNodes(){
+
     for Fileidx in `cat $1`
     do
         firstPt=$(test1stPT $Fileidx)
+        echo $firstPt
 
-        if [ $nbranch == 0 ]
-        then 
-            screen -d -m bash -c "cd $home/$dirRoot$Fileidx; $runNAMD_prog $firstPt $tstep"
-        elif [ $nbranch == 1 ]
-        then 
-            # FIXME: only for the first run, not continuous 
-            screen -d -m bash -c "cd $home/$dirRoot$Fileidx/1; $runNAMD_prog $firstPt $tstep"
-        fi 
+        # if [ $nbranch == 0 ]
+        # then 
+        #     screen -d -m bash -c "cd $home/$dirRoot$Fileidx; $runNAMD_prog $firstPt $tstep $nbranch"
+
+        # elif [ $nbranch == 1 ]
+        # then 
+        #     # FIXME: only for the first run, not continuous 
+
+        #     screen -d -m bash -c "cd $home/$dirRoot$Fileidx/1; $runNAMD_prog $firstPt $tstep $nbranch "
+
+        # fi 
     done 
 }
 
@@ -98,8 +103,8 @@ function test1stPT(){
         # First mode, calculate electronic wavefunction.
         firstPt="$fileRoot$fileidx.iniPM"
     else 
-        # Second mode, read existed electronic wavefunction.
-        firstPt=$( ls  $home/$dirRoot$fileidx | grep _nonad.out | sort -n -t _ -k 3 | tail -n 1 )
+        # Second mode, read existed electronic wavefunction. Use the second last point to start the new calculation.
+        firstPt=$( ls  $home/$dirRoot$fileidx | grep _nonad.out | sort -n -t _ -k 3 | tail -n 2 | head -n 1  )
     fi 
 
     # return value 
