@@ -12,17 +12,9 @@
 # 2022/08/23, Grace, H.G.Chuang@leeds.ac.uk
 # 
 
-tstep=$1
-if [ $tstep == '10.' ]
-then 
-    totpt=900
-elif [ $tstep == '2.5' ]
-then 
-    totpt=3003
-fi 
-fileRoot='traj_'
-
 function main(){
+
+    setParameters $@
 
     printHeader
 
@@ -31,13 +23,49 @@ function main(){
     printStatic
 }
 
+function setParameters(){
+
+    tstep=$1
+    if [ $tstep == '10.' ]
+    then 
+        totpt=900
+    elif [ $tstep == '2.5' ]
+    then 
+        totpt=3003
+    fi 
+    fileRoot='traj_'
+
+    # test file (e.g. traj_1) is exist or not to see cloning 
+    nbranch=0 # default: nbranch = 0; no cloning 
+    if [ -d $fileRoot\1\/1 ] 
+    then 
+        nbranch=1
+    fi 
+}
+
 function calcBody(){
 
     workTraj=0
     fullTraj=0
     fail1pt=0
 
-    ls | grep $fileRoot | sort -n -t _ -k 2 > fileList.tmp 
+    ls | grep $fileRoot | sort -n -t _ -k 2 > fileList.tmp
+    if [ $nbranch == 1 ]
+    then 
+        # cloning 
+        rm -f file.tmp 
+        for n in `cat fileList.tmp `
+        do 
+            subDir=( $(ls $n) )  
+        
+            for (( i=0; i<${#subDir[@]}; i++ ))
+            do 
+                echo $n\/${subDir[@]} >> file.tmp 
+            done 
+
+        done 
+        mv file.tmp fileList.tmp 
+    fi 
 
     rm -f workTraj.dat fullTraj.dat fail1pt.dat restTraj.dat body.tmp 
     for filename in `cat fileList.tmp`
@@ -45,9 +73,9 @@ function calcBody(){
         nfile=$(ls $filename | wc -l)
         if [ $nfile -gt 1 ] # job is running or finished or failed 
         then
-            workTraj=$(( $workTraj + 1)) 
-            lastpt=$(ls $filename | grep nonad.out | wc -l ) 
-            lastpt=$(( $lastpt -1 ))
+            workTraj=$(( $workTraj + 1 )) 
+            lastpt=$(ls $filename | grep -c nonad.out ) 
+            lastpt=$(( $lastpt - 1 ))
             
             echo $filename | sed "s/$fileRoot//g" >> workTraj.dat 
 
@@ -68,8 +96,20 @@ function calcBody(){
             else 
                 echo $filename | sed "s/$fileRoot//g" >> restTraj.dat
             fi 
-        
+
+            
+            if [ $nbranch == 1 ]
+            then 
+                subname=$( echo $filename | cut -d '/' -f 2 ) 
+                if [ $subname ==  1 ]
+                then 
+                    filename=$( echo $filename | cut -d '/' -f 1 )
+                else 
+                    filename=$( echo $filename | cut -d '/' -f 2 )
+                fi 
+            fi 
             printf "%-10s %-6s %-10s %-10s\n" $filename $nfile $lastpt $finalTime
+
         fi 
     done 
     rm -f fileList.tmp 
@@ -97,6 +137,6 @@ function printStatic(){
     echo "fail@1pt: $fail1pt" 
     echo "rest: $(( $workTraj - $fullTraj - $fail1pt)) "
     echo '-------------------------------------'
-}
+}   
 
 main $@

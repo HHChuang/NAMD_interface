@@ -21,6 +21,16 @@
 # 
 ################################################################
 
+# SGE environment setting 
+#$ -cwd -V          # run with current set of modules and in the current dir. 
+#$ -j y             # combine std-out and std-err
+#$ -l h_vmem=4G     # request some memory per core
+#$ -l h_rt=10:0:0   # max 48 hours 
+#$ -pe smp 9
+
+# Q-Chem environment setting 
+module add test qchem 
+
 function main(){
     # 1. Set parameters (global variables in bash shell script)
     setParameters $@
@@ -123,12 +133,14 @@ function calc1stPT_SGE(){
     #     Dynamics input files: 
     #         $1.0, $1.p and $1.1 
     # 
-
+    # 
     # Nine steps to run the first point calculation: 
+    # 
 
     #     1. Extracting position and momentum to form the header of the dynamic file 
     #         input: $1.iniPM 
     #         output: $1.0 (header part)
+    # 
     rootName=$1 
     genDFheader $rootName.0 
 
@@ -136,13 +148,15 @@ function calc1stPT_SGE(){
     #         program: Q-Chem 
     #         input: $1_nonad.inp
     #         output: $1_nonad.out and /$1_WF
-
+    # 
     calcQChemNonad $rootName SAD $rootName.0  
+    
 
     #     3. Calculate force in different electronic states. 
     #         program: Q-Chem
     #         input: $1_force_*.inp 
     #         output: $1_force_*.out and /$1_WF
+    # 
     for (( i=1;i<= $nstat;i++ ))
     do 
         calcQChemForce $rootName $i $1.0
@@ -151,24 +165,28 @@ function calc1stPT_SGE(){
     #     4. Extract EST information to complete the dynamic file.
     #         input: $1_nonad.out and $1_force_*.out 
     #         output: $1.0 (completed) 
+    # 
     genDFtail $rootName $rootName.0 
 
     #     5. Nuclear preliminary propagation 
     #         program: prop_prelim.x
     #         input: $1.0 
     #         output: $1.p 
+    # 
     $propPrelim $rootName # input: $1.0, output: $1.p
 
     #     6. Calculate non-adiabatic coupling.
     #         program: Q-Chem
     #         input: $1_nonad.inp
     #         output: $1_nonad.out and /$1_WF
+    # 
     calcQChemNonad $rootName Read $rootName.p
             
     #     7. Calculate force in different electronic states. 
     #         program: Q-Chem
     #         input: $1_force_*.inp 
     #         output: $1_force_*.out and /$1_WF
+    # 
     for (( i=1;i<= $nstat;i++ ))
     do 
         calcQChemForce $rootName $i $rootName.p
@@ -177,12 +195,14 @@ function calc1stPT_SGE(){
     #     8. Extract EST information to write another dynamic file.
     #         input: $1_nonad.out and $1_force_*.out 
     #         output: $1.p (completed) 
+    # 
     genDFtail $rootName $rootName.p
 
     #     9. Final nuclear propagation 
     #         program: prop_corr.x 
     #         input: $1.p 
     #         output: $1.1 
+    # 
     $propCorr $rootName 
 }
 
@@ -251,7 +271,7 @@ function calcQChemNonad(){
     name_n=$1\_nonad
     qchemOptionNonad $2 # output: qchemOption.tmp
     genqchemInp  $name_n $3 qchemOption.tmp
-    qsubSGEfile $name_n $1 # output: $name_n.out, /$1_WF
+    runQChemFile $name_n $1 # output: $name_n.out, /$1_WF
     check_calc $name_n $1
     rm -f qchemOption.tmp 
 }
@@ -265,7 +285,7 @@ function calcQChemForce(){
     name_f=$1\_force\_$2
     qchemOptionForce $2 # output: qchemOption.tmp
     genqchemInp  $name_f $3 qchemOption.tmp
-    qsubSGEfile $name_f $1 # output: $name_f.out, /$1_WF
+    runQChemFile $name_f $1 # output: $name_f.out, /$1_WF
     check_calc $name_f $1
     rm -f qchemOption.tmp 
 }
@@ -292,12 +312,14 @@ function prop1PT_SGE(){
     #         program: Q-Chem
     #         input: $1_nonad.inp
     #         output: $1_nonad.out and /$1_WF
+    # 
     calcQChemNonad $rootName Read $rootName.p
             
     #     3. Calculate force in different electronic states. 
     #         program: Q-Chem
     #         input: $1_force_*.inp 
     #         output: $1_force_*.out and /$1_WF
+    # 
     for (( i=1;i<= $nstat;i++ ))
     do 
         calcQChemForce $rootName $i $rootName.p
@@ -306,12 +328,14 @@ function prop1PT_SGE(){
     #     4. Extract EST information to 
     #         input: $1_nonad.out and $1_force_*.out 
     #         output: $1.p (completed) 
+    # 
     genDFtail $rootName $rootName.p
 
     #     5. Final nuclear propagation 
     #         program: prop_corr.x 
     #         input: $1.0 and $1.p 
     #         output: $1.1 or $1.1 and $1.2 for cloning
+    # 
     $propCorr $rootName 
 
 }
@@ -449,7 +473,7 @@ function genqchemInp(){
     #     $3 = qchemOption.tmp
     # '''
 
-    # Change unit from Bohr to Angstrom
+    # Extract georetry form dynamic input file, and then change unit from Bohr to Angstrom.
     Bohr2Ang $2 # output: geom_ang.tmp 
 
 cat << EOF > $1.inp
@@ -464,32 +488,14 @@ rm -f atomlist.tmp geom_bohr.tmp geom_ang.tmp
 }
 
 
-function qsubSGEfile(){
+function runQChemFile(){
     # 
     # Input: 
     #       $1 = name of qchem file  
     #       $2 = root of file name 
     # 
 
-cat << EOF > $2.sge
-#!/bin/bash 
-
-# SGE environment setting 
-#$ -cwd -V          # run with current set of modules and in the current dir. 
-#$ -j y             # combine std-out and std-err
-#$ -l h_vmem=4G     # request some memory per core
-#$ -l h_rt=0:15:0   # max 48 hours 
-#$ -pe smp 9
-
-# Q-Chem environment setting 
-module add test qchem 
-
-time qchem -nt \$NSLOTS $1.inp $1.out $2_WF
-
-
-EOF
-
-qsub -sync y $2.sge
+time qchem -nt $NSLOTS $1.inp $1.out $2_WF
 
 }
 
@@ -497,7 +503,7 @@ qsub -sync y $2.sge
 function Bohr2Ang(){
     # 
     # Input:
-    #   $1 = *.1 ; dynamic information input fule
+    #   $1 = dynamic information input fule
     # 
     # Output: 
     #   geom_ang.tmp 
@@ -591,7 +597,7 @@ function check_calc(){
         then
             echo 'Change SCF algorithm to GDM'
             sed -i 's/DIIS/GDM/g' $1.inp
-            qsubSGEfile $1.inp $2 
+            runQChemFile $1.inp $2 
             return 0
         else
             echo "Failed Q-Chem output: $1.out" 
@@ -622,6 +628,5 @@ function check_clon(){
         screen -d -m bash -c "cd ../$filename; $0 $checkname\_nonad.out $timestep"
     fi 
 }
-
 
 main $@

@@ -65,18 +65,21 @@ function manyNodes(){
         firstPt=$(test1stPT $Fileidx)
         echo $firstPt
 
-        # if [ $nbranch == 0 ]
-        # then 
-        #     screen -d -m bash -c "cd $home/$dirRoot$Fileidx; $runNAMD_prog $firstPt $tstep $nbranch"
+        if [ $nbranch == 0 ]
+        then 
+            workDir="$home/$dirRoot$Fileidx"
+        elif [ $nbranch == 1 ]
+        then 
+            workDir="$home/$dirRoot$Fileidx/1"
+        fi 
 
-        # elif [ $nbranch == 1 ]
-        # then 
-        #     # FIXME: only for the first run, not continuous 
-
-        #     screen -d -m bash -c "cd $home/$dirRoot$Fileidx/1; $runNAMD_prog $firstPt $tstep $nbranch "
-
-        # fi 
+        cd $workDir
+        cp  $runNAMD_prog $dirRoot$Fileidx.sge 
+        qsub $dirRoot$Fileidx.sge  $firstPt $tstep $nbranch
     done 
+
+    cd  $home 
+
 }
 
 function test1stPT(){
