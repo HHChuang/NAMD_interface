@@ -71,22 +71,21 @@
         ```
      - Visualize molecular structure. 
        - [Download Jmol](https://jmol.sourceforge.net/download/) via this link if you need.
+       - input: g_1.xyz
+       - output: stdout 
         ```
         $ jmol g_1.xyz 
         ```
-        <!-- ![ch4](/aux/CH4.png ) -->
         [<img src="/aux/CH4.png" width="250"/>](/aux/CH4.png)
-
-        <!-- <img src="/aux/CH4.png" width="200"> -->
 
 2. Check nuclear and electronic setting.
     -  File: setting.dat  
-    -  Especially check the number of atom and number of state.
+    -  Especially check the number of atom and number of state for different molecule.
   
 3. Run dynamics.
     - Input for `runNAMD_slave`
-        1. Coordinate and momentum for the molecule 
-        2. Nuclear and electronic setting  
+        1. File with molecular coordinate and momentum (g_1.iniPM).
+        2. File with nuclear and electronic setting (setting.dat). 
     ```
     $ qsub runNAMD_slave g_1.iniPM setting.dat 
     ```
@@ -108,6 +107,8 @@
         ```
 
     - Visualize molecular structure. 
+      - input: c3h2f4.xyz 
+      - output: stdout
        ```
        $ jmol c3h2f4.xyz 
        ```
