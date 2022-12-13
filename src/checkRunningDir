@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 # Input: 
-#   $1 = time step in a.u. 
+#   $1 = setting.dat 
 # 
 # Output:
 #   1. totTraj.dat 
@@ -50,7 +50,7 @@ function setParameters(){
 
     home=`pwd`
 
-    tstep=$1
+    tstep=$( grep -A 1 'Time step' $1 | tail -n 1 )
     if [ $tstep == '10.' ]
     then 
         totpt=900
@@ -60,12 +60,8 @@ function setParameters(){
     fi 
     fileRoot='traj_'
 
-    # test file (e.g. traj_1) is exist or not to see cloning 
-    nbranch=0 # default: nbranch = 0; no cloning 
-    if [ -d $fileRoot\1\/1 ] 
-    then 
-        nbranch=1
-    fi 
+
+    nbranch=$( grep -A 1 'Cloning or not' $1 | tail -n 1 )
 }
 
 
@@ -103,7 +99,10 @@ function calcBody(){
         if [ $nfile -gt 1 ] # job is running or finished or failed 
         then
             lastpt=$(ls $filename | grep -c nonad.out ) 
-            lastpt=$(( $lastpt - 1 ))
+            if [ $lastpt != 0 ]
+            then 
+                lastpt=$(( $lastpt - 1 ))
+            fi
             
             # check if $lastpt is empty 
             if [ -z $lastpt  ] 
@@ -167,10 +166,12 @@ function calcTerm(){
     rm -f termTraj.dat 
     if [ $nbranch == 0 ]
     then 
+        rm -f runningTraj_clon.dat 
         sed -i "s/$fileRoot//g" runningTraj.dat 
         diff totTraj.dat runningTraj.dat | grep '<' | sed 's/<//g' > termTraj.dat 
     elif [ $nbranch == 1 ]
     then 
+        rm -f runningTraj.dat 
         sed -i "s/$fileRoot//g" runningTraj_clon.dat
         diff totTraj.dat runningTraj_clon.dat | grep '<' | sed 's/<//g' > termTraj.dat 
     fi 
@@ -199,8 +200,14 @@ function printStatic(){
     echo ''
     echo 'Filenames are listed in the following files:'
     echo 'totTraj.dat, fullTraj.dat,fail1pt.dat,'
-    echo 'restTraj.dat, runningTraj.dat, runningTraj_clon.dat'
-    echo 'termTraj.dat'
+    echo 'restTraj.dat, termTraj.dat,'
+    if [ $nbranch == 0 ]
+    then 
+        echo 'runningTraj.dat.'
+    elif [ $nbranch == 1 ] 
+    then 
+        echo 'runningTraj_clon.dat.'
+    fi 
     echo ''
     echo 'Number of trajectories:'
     echo "total: $totTraj " 
