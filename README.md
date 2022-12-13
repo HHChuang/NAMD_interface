@@ -74,7 +74,8 @@
         ```
         $ jmol g_1.xyz 
         ```
-        ![test](/aux/CH4.png =250x)
+        <!-- ![ch4](/aux/CH4.png ) -->
+        <img src="/aux/CH4.png" width="200">
 
 2. Check nuclear and electronic setting.
     -  File: setting.dat  
