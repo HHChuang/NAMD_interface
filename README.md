@@ -112,6 +112,11 @@
        ```
        $ jmol c3h2f4.xyz 
        ```
+       
+
+https://user-images.githubusercontent.com/23027121/207396553-20de17e4-2ad3-45f7-839f-fd4ac715483c.mov
+
+
        <!-- ![test](../NAMD_code/aux/CH4.png) -->
     
 2. Generate the coordinate plus momentum file (*.iniPM) by the sampling file. 
