@@ -5,77 +5,49 @@
 # 
 # Input: 
 #   $1 = list of subdirectory name 
-#   $2 = time step in a.u. 
-#   $3 = 0 or 1, 0 = no cloning, 1 = have cloning
+#   $2 = setting files, *.dat
 # 
 # Pre-requist: 
 #   runNAMD_head
+#   GNU parallel
 # 
 #     2022/08/22, Grace, H.G.Chuang@leeds.ac.uk
 # 
 
 function main(){
-    # 
-    # Depends on how expansive of the electronic structure calculation and computational resource we have, we need to choose different strategies to run molecular dynamics. 
-    # 
 
     # Set global variables
     parameters $@
 
-    # 
-    # 1. Run jobs on single node
-    #
-    # oneNode $@
-    # 
-
-    # 2. Run jobs on multiple nodes (use `screen` to continue the propagation)
-    # 
+    # Run jobs on multiple nodes (use `screen` to continue the propagation)
     manyNodes $@
+    
 }
 
 function parameters(){
+    
     dirRoot='traj_'
     fileRoot='g_'
     home=`pwd`
     numfile_threshold='10'
-    tstep=$2 
-    nbranch=$3
+    settingFile=$home'/'$2 
+    nbranch=$(grep -A 1 'Cloning or not' $2 | tail -n 1 )
 
     runNAMD_prog='/home/home02/chmhch/NAMD_src/runNAMD_slave'
-}
-
-function oneNode(){
-    
-
-    for Fileidx in `cat $1`
-    do 
-        firstPt=$(test1stPT $Fileidx)
-        
-        cd $home/$dirRoot$Fileidx
-
-        $runNAMD_prog $firstPt $tstep $nbranch
-    done 
-
 }
 
 function manyNodes(){
 
     for Fileidx in `cat $1`
     do
-        firstPt=$(test1stPT $Fileidx)
-        echo $firstPt
+        workDir="$home/$dirRoot$Fileidx"
 
-        if [ $nbranch == 0 ]
-        then 
-            workDir="$home/$dirRoot$Fileidx"
-        elif [ $nbranch == 1 ]
-        then 
-            workDir="$home/$dirRoot$Fileidx/1"
-        fi 
+        firstPt=$(test1stPT $workDir $Fileidx)
+        sgefile=$(echo $firstPt| cut -d '.' -f 1)
+        cd $workDir 
+        cp $runNAMD_prog $sgefile.sge 
+        qsub $sgefile.sge $firstPt $settingFile  
 
-        cd $workDir
-        cp  $runNAMD_prog $dirRoot$Fileidx.sge 
-        qsub $dirRoot$Fileidx.sge  $firstPt $tstep $nbranch
     done 
 
     cd  $home 
@@ -86,19 +58,24 @@ function test1stPT(){
     # 
     #   If the selected directory only has one file (molecular position and momentum file with the file extension as '.iniPM', then it goes to the first mode which calculate the initial electronic wavefunction, or it goes to the second mode which reads the existed electronic wavefunction.)
     # 
-    #   For the second mode, it only support the second run for now. 
-    # 
     # Input: 
-    #   $1 = file index 
+    #   $1 = path of the working directory
+    #   $2 = fileidx
     # 
     # Output: 
     #   $firstPt
     # 
     
-    fileidx=$1 
+    workdir=$1 
+    numfile=$(ls $workdir | grep -c .out )
 
-    cd $home 
-    numfile=$(ls $dirRoot$fileidx | grep -c .out )
+    if [ $nbranch == 0 ]
+    then
+        fileidx=$2
+    elif [ $nbranch == 1 ]
+    then 
+        fileidx=$(echo $2 | cut -d '/' -f 1)
+    fi 
         
     # If the number of file is less than $numfile_threshold, start trajectory form the first point. (i.e. calculate directory *_WF for storing wavefunction)
     if [ $numfile -lt $numfile_threshold ]
@@ -107,7 +84,7 @@ function test1stPT(){
         firstPt="$fileRoot$fileidx.iniPM"
     else 
         # Second mode, read existed electronic wavefunction. Use the second last point to start the new calculation.
-        firstPt=$( ls  $home/$dirRoot$fileidx | grep _nonad.out | sort -n -t _ -k 3 | tail -n 2 | head -n 1  )
+        firstPt=$( ls  $workdir | grep _nonad.out | sort -n -t _ -k 3 | tail -n 2 | head -n 1  )
     fi 
 
     # return value 

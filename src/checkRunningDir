@@ -4,26 +4,51 @@
 #   $1 = time step in a.u. 
 # 
 # Output:
-#   1. workTraj.dat 
+#   1. totTraj.dat 
 #   2. fullTraj.dat 
 #   3. fail1pt.dat 
 #   4. restTraj.dat
+#   5. runningTraj.dat 
+#   6. runningTraj_clon.dat 
+#   7. termTraj.dat
 # 
 # 2022/08/23, Grace, H.G.Chuang@leeds.ac.uk
 # 
 
 function main(){
-
+    # 1. Set global variables
     setParameters $@
 
+    # 2. Standard output of header 
     printHeader
 
-    calcBody
+    # 3. Count the number of files in each trail directory, and also transform tham into fs. 
+    # 
+    # Output:
+    #   1. totTraj.dat 
+    #   2. fullTraj.dat
+    #   3. fail1pt.dat 
+    #   4. restTraj.dat 
+    # 
+    calcBody 
 
+    # 4. Calculte the terminate directory name in order to resubmit them. 
+    # 
+    # Output: 
+    #   1. runningTraj.dat 
+    #   2. runningTraj_clon.dat 
+    #   3. termTraj.dat 
+    # 
+    calcTerm 
+
+    # 5. Standard output of statistic result. 
     printStatic
 }
 
+
 function setParameters(){
+
+    home=`pwd`
 
     tstep=$1
     if [ $tstep == '10.' ]
@@ -43,9 +68,10 @@ function setParameters(){
     fi 
 }
 
+
 function calcBody(){
 
-    workTraj=0
+    totTraj=0
     fullTraj=0
     fail1pt=0
 
@@ -67,18 +93,19 @@ function calcBody(){
         mv file.tmp fileList.tmp 
     fi 
 
-    rm -f workTraj.dat fullTraj.dat fail1pt.dat restTraj.dat body.tmp 
+    rm -f totTraj.dat fullTraj.dat fail1pt.dat restTraj.dat body.tmp 
     for filename in `cat fileList.tmp`
     do
+        totTraj=$(( $totTraj + 1 )) 
+        echo $filename >> totTraj.dat
+
         nfile=$(ls $filename | wc -l)
         if [ $nfile -gt 1 ] # job is running or finished or failed 
         then
-            workTraj=$(( $workTraj + 1 )) 
             lastpt=$(ls $filename | grep -c nonad.out ) 
             lastpt=$(( $lastpt - 1 ))
             
-            echo $filename | sed "s/$fileRoot//g" >> workTraj.dat 
-
+            # check if $lastpt is empty 
             if [ -z $lastpt  ] 
             then 
                 lastpt=1
@@ -112,8 +139,45 @@ function calcBody(){
 
         fi 
     done 
+    sed -i "s/$fileRoot//g" totTraj.dat 
     rm -f fileList.tmp 
 }
+
+
+function calcTerm(){
+
+    num_homeDir=$(echo $home | tr -d -c '/' | awk '{print length}' )
+    num_homeDir_plus1=$(( $num_homeDir + 1 )) 
+    num_homeDir_plus2=$(( $num_homeDir + 2 )) 
+
+    qstat -u $USER | awk '{print $1}' | grep '[0-9]' > jobid.tmp 
+    rm -f runningTraj.dat runningTraj_clon.dat 
+    for id_i in `cat jobid.tmp`
+    do 
+        check_clon=$(qstat -j $id_i | grep 'sge_o_workdir' | awk '{print $2}' | tr -d -c '/' | awk '{print length}') 
+        if [ $check_clon == $num_homeDir_plus1 ] 
+        then 
+            qstat -j $id_i | grep 'sge_o_workdir' | awk '{print $2}' | cut -d '/' -f 7 >> runningTraj.dat
+        elif [ $check_clon == $num_homeDir_plus2 ]
+        then
+            qstat -j $id_i | grep 'sge_o_workdir' | awk '{print $2}' | cut -d '/' -f 7,8 >> runningTraj_clon.dat 
+        fi 
+    done 
+    
+    rm -f termTraj.dat 
+    if [ $nbranch == 0 ]
+    then 
+        sed -i "s/$fileRoot//g" runningTraj.dat 
+        diff totTraj.dat runningTraj.dat | grep '<' | sed 's/<//g' > termTraj.dat 
+    elif [ $nbranch == 1 ]
+    then 
+        sed -i "s/$fileRoot//g" runningTraj_clon.dat
+        diff totTraj.dat runningTraj_clon.dat | grep '<' | sed 's/<//g' > termTraj.dat 
+    fi 
+    termTraj=$(wc -l termTraj.dat | awk '{print $1}')
+    rm -f jobid.tmp 
+}
+
 
 function printHeader(){
     head1='file' 
@@ -127,16 +191,26 @@ function printHeader(){
 
 }
 
+
 function printStatic(){
-    echo '-------------------------------------'
+    echo '-----------------------------------------------'
     echo ''
-    echo 'Statistic result: workTraj.dat, fullTraj.dat, fail1pt.dat, restTraj.dat'
-    echo "total: $workTraj " 
+    echo 'Statistic result'
     echo ''
+    echo 'Filenames are listed in the following files:'
+    echo 'totTraj.dat, fullTraj.dat,fail1pt.dat,'
+    echo 'restTraj.dat, runningTraj.dat, runningTraj_clon.dat'
+    echo 'termTraj.dat'
+    echo ''
+    echo 'Number of trajectories:'
+    echo "total: $totTraj " 
+    echo ''
+    echo "terminate: $termTraj"
     echo "full: $fullTraj "
     echo "fail@1pt: $fail1pt" 
-    echo "rest: $(( $workTraj - $fullTraj - $fail1pt)) "
-    echo '-------------------------------------'
+    echo "rest: $(( $totTraj - $fullTraj - $fail1pt)) "
+    echo '-----------------------------------------------'
 }   
+
 
 main $@

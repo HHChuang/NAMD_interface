@@ -10,8 +10,9 @@
 #       $1 = first point of trajectory 
 #           *.iniPM (coordinate and momentum in a.u.)
 # 
-#       $2 = time step in a.u. (10. or 2.5)
-#       $3 = 0 or 1, 0 = no cloning, 1 = have cloning
+#       $2 = Other settings; *.dat 
+#            - time step in a.u. (10. or 2.5)
+#            - 0 or 1, 0 = no cloning, 1 = have cloning
 # 
 #   Pre-requested:
 #       1. EST: QChem program 
@@ -65,7 +66,8 @@ function main(){
 
 function setParameters(){
     # Check if the input argument exist or not.
-    [ "$1" == "" ] && echo "File $1 is not exist, stop program." && exit
+    [ "$1" == "" ] && echo "First file is not exist, stop program." && exit
+    [ "$2" == "" ] && echo "Second file is not exist, stop program." && exit
 
     # Check the file extension 
     fileExten=$(echo $1 | cut -d '.' -f 2 )
@@ -88,12 +90,11 @@ function setParameters(){
     propCoor_clon="/home/home02/chmhch/NAMD_src/prop_corr_clon.x"
 
     # Nuclear dynamic setting 
-    natom=9
-    nstat=7
-    ini_stat=5 # 0 = ground state
-    nbranch=$3 # binary: 0 = no cloning,  1 = start cloning 
-    time_ini=0.
-    timestep=$2  # a.u., 2.4189 * 10^-17 
+    natom=$(grep -A 1 'Number of atom' $2 | tail -n 1 )
+    nstat=$(grep -A 1 'Number of state' $2 | tail -n 1 )
+    iniState=$(grep -A 1 ' Initial state' $2 | tail -n 1 )
+    nbranch=$(grep -A 1 'Cloning or not' $2 | tail -n 1 )
+    timestep=$(grep -A 1 'Time step' $2 | tail -n 1 )
     bohr2ang=0.5292 # To be used in subroutine Bohr2Ang()
     if [ $timestep == '10.' ]
     then 
@@ -109,11 +110,12 @@ function setParameters(){
     fi 
     
     # Basic electroic structure setting 
-    charge=0
-    multi=3
+    charge=$(grep -A 1 'Charge' $2 | tail -n 1 )
+    multi=$(grep -A 1 'Multiplicity' $2 | tail -n 1 )
     statlist=()
-    basis='6-31+G*'
-    dft='BHHLYP'
+    basis=$(grep -A 1 'Basis' $2 | tail -n 1 )
+    dft=$(grep -A 1 'Theory' $2 | tail -n 1 )
+
     for ((i=1; i <= $nstat; i++))
     do 
         statlist+=($i)
@@ -343,21 +345,23 @@ function prop1PT_SGE(){
 
 function genDFheader(){
     # 
+    # Only call this function for the first point simulation.
+    # 
     # Input:
     #   $1 = file name 
     # 
 
     echo "$natom $nstat   ! Number of atoms and number of states" > $1 
     echo "$nbranch ! Branch number; 0 - no cloning " >> $1 
-    echo "$time_ini $timestep !Time and timestep " >> $1 
+    echo "0 $timestep !Time and timestep " >> $1 
     echo '! Positions' >> $1 
     cat $rootName.iniPM >> $1
     echo '!Ehrenfest amplitudes (complex numbers)'  >> $1
     for ((i=0;i<$nstat;i++))
     do 
-        if [ i == $ini_stat ]
+        if [ $i == $iniState ]
         then
-             echo '0.1000000000000000E+01' >> $1
+            echo '1.0000000000000000E+00' >> $1
         else 
             echo '0.0000000000000000E+00' >> $1
         fi 
@@ -533,8 +537,8 @@ cat << EOF > qchemOption.tmp
 \$rem
     !EXCHANGE            HF
     !CORRELATION         CI
-    EXCHANGE            BHHLYP !50% HF +  50% Becke88 exchange
-    BASIS               6-31+G*
+    EXCHANGE            $dft 
+    BASIS               $basis
     UNRESTRICTED        True
     MAX_SCF_CYCLES      500
     SYM_IGNORE          True

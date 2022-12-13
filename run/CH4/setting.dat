@@ -1,0 +1,20 @@
+# Nuclear part setting 
+# Number of atom 
+5
+# Number of state 
+3 
+# Initial state, 0 = ground state 
+2 
+# Cloning or not, 0 = no cloning, 1 = cloning 
+0  
+# Time step, 1 a.u. =  2.4189 * 10^-17 sec.
+10.
+# Electronic part setting 
+# Charge 
+0
+# Multiplicity 
+3
+# Theory 
+BHHLYP
+# Basis 
+6-31+G*

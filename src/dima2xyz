@@ -17,17 +17,25 @@ keyword=Geometry
 bohr2ang=0.529177
 
 input=$1
+rootname=$(echo $input | cut -d '.' -f 1)
 atomlist=( $(cat $2) )
 natom=$( echo ${#atomlist[@]} )
-output=$input.xyz
-totL=$(grep "$keyword" $input | tail -n 1 | awk '{print $2}')
+output=$rootname.xyz
+totL=$(grep -c "$keyword" $input )
 
 rm -f $output
 for ((i=1;i<=$totL;i++))
 do 
     echo $natom >> $output 
     echo $input\_$i >> $output 
-    grep -A $natom "$keyword $i" $input | tail -n $natom > tmp 
+
+    if [ $totL == 1 ]
+    then 
+        grep -A $natom "$keyword" $input | tail -n $natom > tmp 
+    else 
+        grep -A $natom "$keyword $i" $input | tail -n $natom > tmp
+    fi 
+
     for ((n=1;n<=$natom;n++))
     do 
         coord=( $(sed -n "$n,$n p" tmp ) )

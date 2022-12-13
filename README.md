@@ -7,9 +7,13 @@
     - [Input data procession](#input-data-procession)
     - [On-the-fly dynamic propagation](#on-the-fly-dynamic-propagation)
     - [Output data procession](#output-data-procession)
-  - [Example of propagating methane trajectory](#example-of-propagating-methane-trajectory)
+  - [Example of propagating trajectory](#example-of-propagating-trajectory)
     - [Single trajectory](#single-trajectory)
+      - [Set input and submit jobs on HPC](#set-input-and-submit-jobs-on-hpc)
+      - [Analyse output files](#analyse-output-files)
     - [Multiple trajectories](#multiple-trajectories)
+      - [Set input and submit jobs on HPC](#set-input-and-submit-jobs-on-hpc-1)
+      - [Analyse output files](#analyse-output-files-1)
 ---
 ## Brief summary
   > Interface of running nonadiabatic molecular dynamics (NAMD) between QChem and homemade nuclear dynamic program (Dr. Dmitry Makhov).
@@ -52,8 +56,77 @@
     3. `macro_ana`: Call `anaOneProd` to analyse all trajectories. 
     4. `plotStates.gnu`: Use gnuplot to plot potential energy curves, population of each electronic state, and non-adiabatic coupling for any two states. 
 ---
-## Example of propagating methane trajectory 
+## Example of propagating trajectory 
 
 ### Single trajectory 
 
+- PATH: /run/CH4 
+#### Set input and submit jobs on HPC
+1. Check geometry after sampling.
+     - Transform the unit of molecular coordinate from Bohr to angstrom.
+        - input: g_1.dima, atomlist.dat 
+        - output: g_1.xyz 
+        ```
+          $ dima2xyz g_1.dima atomlist.dat 
+        ```
+     - Visualize molecular structure. 
+       - [Download Jmol](https://jmol.sourceforge.net/download/) via this link if you need.
+        ```
+        $ jmol g_1.xyz 
+        ```
+        ![test](../NAMD_code/aux/CH4.png)
+
+2. Check nuclear and electronic setting.
+    -  File: setting.dat  
+    -  Especially check the number of atom and number of state.
+  
+3. Run dynamics.
+    - Input for `runNAMD_slave`
+        1. Coordinate and momentum for the molecule 
+        2. Nuclear and electronic setting  
+    ```
+    $ qsub runNAMD_slave g_1.iniPM setting.dat 
+    ```
+
+#### Analyse output files
+
 ### Multiple trajectories
+
+- PATH: /run/C3H2F4 
+
+#### Set input and submit jobs on HPC
+
+1. Check geometry after sampling. In this example, it has five molecular structures. 
+   - Transform the unit of molecular coordinate from Bohr to angstrom.
+        - input: c3h2f4.dima, atomlist.dat 
+        - output: c3h2f4.xyz 
+        ```
+            $ dima2xyz c3h2f4.dima atomlist.dat 
+        ```
+
+    - Visualize molecular structure. 
+       ```
+       $ jmol c3h2f4.xyz 
+       ```
+       <!-- ![test](../NAMD_code/aux/CH4.png) -->
+    
+2. Generate the coordinate plus momentum file (*.iniPM) by the sampling file. 
+    ```
+    $ dima2iniPM c3h2f4.dima atomlist.dat 
+    ```
+3. After check the setting, create sub-directory for each trajectory. And then put all the *.iniPM into these subdirectories separately. Also, create the list for recording the sub-directory index. 
+   ```
+    $ for ((i=1;i<=5;i++))
+        do 
+            mkdir traj_$i
+            mv g_$i.iniPM traj_$i 
+            echo $i >> list.dat 
+        done 
+   ```
+4. Run dynamics. 
+    ```
+    $ macro_runNAMD list.dat setting.dat 
+    ```
+
+
+#### Analyse output files
