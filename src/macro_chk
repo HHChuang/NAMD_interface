@@ -1,0 +1,30 @@
+#!/bin/bash
+# 
+# Input: 
+#   $1 = directory index list file 
+# 
+# Pre-request: 
+#   check1traj
+# 
+# 2022/12/14, Grace, H.G.Chuang@leeds.ac.uk
+# 
+
+function main(){
+    setParameters $@
+
+    for i in `cat $1`
+    do 
+        echo $subDir_root$i > arg2.dat 
+        echo $job_root$i > arg3.dat 
+        check1traj $tarDir_root$i arg2.dat arg3.dat 
+    done 
+    rm -f arg2.dat arg3.dat 
+}
+
+function setParameters(){
+    tarDir_root='ana_'
+    job_root='g_'
+    subDir_root='traj_'
+}
+
+main $@

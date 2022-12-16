@@ -1,0 +1,180 @@
+#!/bin/bash
+# 
+# Input:
+#       $1 = list of directory name for analysing 
+#       $2 = line number of the selected time frame (option)
+# 
+# Pre-request: 
+#   analOneProd: analyse the result of one single trajectory
+# 
+# 2022/08/19, Grace, H.G.Chuang@leeds.ac.uk
+#  
+
+fileRoot='ana_'
+
+function main(){
+
+    # 1. Use analOneProd.sh to extract one trajectory information 
+    callOneTrajScript $@
+    # output: 
+    #   1. array variables: 
+    #       ${chtype[@]}, ${rxntype[@]} 
+    #   2. files: 
+    #       CHn_*.dat and rxn_*.dat 
+
+    # 2. Calculate percentage for statistical purpose 
+    calcPercentage
+    # input: 
+    #   ${chtype[@]}, ${rxntype[@]}
+    # output: 
+    #   $totTraj, ${chtypeper[@]}, ${rxntypeper[@]}
+
+    # 3. Print out above information 
+    printResult $1
+    # output: 
+    #   1. Std-out 
+    #   2. CHn_*.dat and rxn_*.dat 
+}
+
+function callOneTrajScript(){
+    # $1 = list of directory name 
+    # $2 = line number of the selected time frame (option)
+
+    if [ -z $2 ]
+    then
+        testfile_idx=`head -n 1 $1 `
+        testfile=$fileRoot$testfile_idx 
+        targetLine=$(wc -l $testfile/Bonds.ang | awk '{print $1}' )
+    else
+        targetLine=$2 
+    fi 
+
+    # CHn group 
+    rm -f CHn_CH.dat CHn_CH2.dat CHn_CH3.dat CHn_CH4.dat CHn_Others.dat
+    # rxn group 
+    rm -f rxn_CH4.dat rxn_CH3_H.dat rxn_CH2_H2.dat rxn_CH2_2H.dat rxn_CH_3H.dat rnx_CH_H2_H.dat rxn_Others.dat 
+
+    chtype=(0 0 0 0 0)
+    rxntype=(0 0 0 0 0 0 0)
+    for f in `cat $1`
+    do
+        dirname=$fileRoot$f
+        if [ -d "$dirname" ]
+        then
+            analOneProd $dirname/Bonds.ang $targetLine > tmp 
+            prodCH=$(head -n 1 tmp | awk '{print $1}' )
+            rxn=$(tail -n 1 tmp)
+        
+            if [ $prodCH == 'CH1' ] 
+            then 
+                chtype[0]=$(( ${chtype[0]} + 1 )) 
+                echo $f >> CHn_CH.dat 
+            elif [ $prodCH == 'CH2' ]
+            then
+                chtype[1]=$(( ${chtype[1]} + 1 )) 
+                echo $f >> CHn_CH2.dat
+            elif [ $prodCH == 'CH3' ]
+            then
+                chtype[2]=$(( ${chtype[2]} + 1 )) 
+                echo $f >> CHn_CH3.dat
+            elif [ $prodCH == 'CH4' ]
+            then
+                chtype[3]=$(( ${chtype[3]} + 1 )) 
+                echo $f >> CHn_CH4.dat
+            elif [ $prodCH == 'Others' ]
+            then
+                chtype[4]=$(( ${chtype[4]} + 1 )) 
+                echo $f >> CHn_Others.dat
+            fi
+            
+            if [ $rxn == 'CH4' ]
+            then 
+                rxntype[0]=$(( ${rxntype[0]} + 1 ))   
+                echo $f >> rxn_CH4.dat 	
+            elif [ $rxn == 'CH3+H' ] 
+            then
+                rxntype[1]=$(( ${rxntype[1]} + 1 ))  
+                echo $f >> rxn_CH3_H.dat  
+            elif [ $rxn == 'CH2+H2' ]
+            then 
+                rxntype[2]=$(( ${rxntype[2]} + 1 ))  
+                echo $f >> rxn_CH2_H2.dat 
+            elif [ $rxn == 'CH2+2H' ]
+            then  
+                rxntype[3]=$(( ${rxntype[3]} + 1 ))  
+                echo $f >> rxn_CH2_2H.dat 
+            elif [ $rxn == 'CH+3H' ]
+            then 
+                rxntype[4]=$(( ${rxntype[4]} + 1 )) 
+                echo $f >> rxn_CH_3H.dat  
+            elif [ $rxn == 'CH2+H2+H' ] 
+            then 
+                rxntype[5]=$(( ${rxntype[5]} + 1 ))  
+                echo $f >> rxn_CH2_H2_H.dat 
+            elif [ $rxn == 'Others' ]
+            then 
+                rxntype[6]=$(( ${rxntype[6]} + 1 ))  
+                echo $f >> rxn_Others.dat 
+            fi 
+        else 
+            echo "Directory $dirname is not exist."
+        fi 
+    done 
+    rm -f tmp
+}
+ 
+function calcPercentage(){
+    totTraj=0
+    for ((i=0;i<5;i++))
+    do
+        totTraj=$(( $totTraj + ${chtype[$i]} ))
+    done 
+
+    chtypeper=()
+    for ((i=0;i<5;i++))
+    do 
+        chtypeper+=( $(awk "BEGIN {print ${chtype[$i]}/$totTraj*100 }") )
+    done 
+
+    rxntypeper=()
+    for ((i=0;i<7;i++))
+    do
+        rxntypeper+=($(awk "BEGIN {print ${rxntype[$i]}/$totTraj*100 }"))
+    done
+}
+
+function printResult(){
+
+    echo '--------------------------------------------------------------'
+    echo "Statistical result for $totTraj trajectories. "
+    echo '--------------------------------------------------------------'
+    echo "Input file:"
+    echo "  $1"
+    echo ""
+    echo "Output files: "
+    echo "  1. CHn group: "
+    echo "      CHn_CH.dat CHn_CH2.dat CHn_CH3.dat CHn_CH4.dat "
+    echo "      CHn_Others.dat"
+    echo "  2. rxn group: "
+    echo "      rxn_CH4.dat rxn_CH3_H.dat rxn_CH2_H2.dat rxn_CH2_2H.dat "
+    echo "      rxn_CH_3H.dat rxn_CH_H2_H.dat rxn_Others.dat "
+    echo '--------------------------------------------------------------'
+    echo '1. Count sucessful CH bond'
+    echo "CH:     ${chtype[0]} (`printf "%.0f\n" ${chtypeper[0]}`%)"  
+    echo "CH2:    ${chtype[1]} (`printf "%.0f\n" ${chtypeper[1]}`%)"  
+    echo "CH3:    ${chtype[2]} (`printf "%.0f\n" ${chtypeper[2]}`%)"  
+    echo "CH4:    ${chtype[3]} (`printf "%.0f\n" ${chtypeper[3]}`%)"  
+    echo "Others: ${chtype[4]} (`printf "%.0f\n" ${chtypeper[4]}`%)"  
+    echo ''
+    echo '2. Dissociation type (Count sucessful CH and HH bond)'
+    echo "CH4:          ${rxntype[0]} (`printf "%.0f\n" ${rxntypeper[0]}`%)"
+    echo "CH3 + H:      ${rxntype[1]} (`printf "%.0f\n" ${rxntypeper[1]}`%)"
+    echo "CH2 + H2:     ${rxntype[2]} (`printf "%.0f\n" ${rxntypeper[2]}`%)"
+    echo "CH2 + 2H:     ${rxntype[3]} (`printf "%.0f\n" ${rxntypeper[3]}`%)"
+    echo "CH  + 3H:     ${rxntype[4]} (`printf "%.0f\n" ${rxntypeper[4]}`%)"
+    echo "CH  + H2 + H: ${rxntype[5]} (`printf "%.0f\n" ${rxntypeper[5]}`%)"
+    echo "Others:       ${rxntype[6]} (`printf "%.0f\n" ${rxntypeper[6]}`%)"
+    echo '--------------------------------------------------------------'
+}
+
+main $@

@@ -87,7 +87,7 @@ function setParameters(){
     qchemProg='qchem'
     propPrelim="/home/home02/chmhch/NAMD_src/prop_prelim.x"
     propCorr="/home/home02/chmhch/NAMD_src/prop_corr.x"
-    propCoor_clon="/home/home02/chmhch/NAMD_src/prop_corr_clon.x"
+    propCoor_clon="/home/home02/chmhch/NAMD_src/prop_corr_clon_test.x"
 
     # Nuclear dynamic setting 
     natom=$(grep -A 1 'Number of atom' $2 | tail -n 1 )
@@ -535,8 +535,6 @@ function qchemOptionNonad(){
     
 cat << EOF > qchemOption.tmp
 \$rem
-    !EXCHANGE            HF
-    !CORRELATION         CI
     EXCHANGE            $dft 
     BASIS               $basis
     UNRESTRICTED        True
@@ -567,10 +565,8 @@ function qchemOptionForce(){
 cat << EOF > qchemOption.tmp
 \$rem
     JOBTYPE             Force
-    !EXCHANGE            HF
-    !CORRELATION         CI
-    EXCHANGE            BHHLYP !50% HF +  50% Becke88 exchange 
-    BASIS               6-31+G*
+    EXCHANGE            $dft 
+    BASIS               $basis
     UNRESTRICTED        True
     MAX_SCF_CYCLES      500
     SYM_IGNORE          True

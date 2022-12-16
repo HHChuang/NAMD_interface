@@ -157,6 +157,7 @@ function calcTerm(){
         if [ $check_clon == $num_homeDir_plus1 ] 
         then 
             qstat -j $id_i | grep 'sge_o_workdir' | awk '{print $2}' | cut -d '/' -f 7 >> runningTraj.dat
+            # exit
         elif [ $check_clon == $num_homeDir_plus2 ]
         then
             qstat -j $id_i | grep 'sge_o_workdir' | awk '{print $2}' | cut -d '/' -f 7,8 >> runningTraj_clon.dat 
@@ -164,16 +165,27 @@ function calcTerm(){
     done 
     
     rm -f termTraj.dat 
+
     if [ $nbranch == 0 ]
     then 
         rm -f runningTraj_clon.dat 
-        sed -i "s/$fileRoot//g" runningTraj.dat 
-        diff totTraj.dat runningTraj.dat | grep '<' | sed 's/<//g' > termTraj.dat 
+        if [ -f runningTraj.dat ]
+        then 
+            sed -i "s/$fileRoot//g" runningTraj.dat 
+            diff totTraj.dat runningTraj.dat | grep '<' | sed 's/<//g' > termTraj.dat 
+        else 
+            cp totTaj.dat termTaj.dat 
+        fi 
     elif [ $nbranch == 1 ]
     then 
         rm -f runningTraj.dat 
-        sed -i "s/$fileRoot//g" runningTraj_clon.dat
-        diff totTraj.dat runningTraj_clon.dat | grep '<' | sed 's/<//g' > termTraj.dat 
+        if [ -f runningTraj_clon.dat ]
+        then 
+            sed -i "s/$fileRoot//g" runningTraj_clon.dat
+            diff totTraj.dat runningTraj_clon.dat | grep '<' | sed 's/<//g' > termTraj.dat 
+        else 
+            cp totTaj.dat termTaj.dat 
+        fi 
     fi 
     termTraj=$(wc -l termTraj.dat | awk '{print $1}')
     rm -f jobid.tmp 

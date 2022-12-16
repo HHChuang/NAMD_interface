@@ -21,7 +21,9 @@ function main(){
 
     # Run jobs on multiple nodes (use `screen` to continue the propagation)
     manyNodes $@
-    
+
+    # Detect current submitting status, and then resubmit it if it ends. TODO:
+
 }
 
 function parameters(){
@@ -33,7 +35,7 @@ function parameters(){
     settingFile=$home'/'$2 
     nbranch=$(grep -A 1 'Cloning or not' $2 | tail -n 1 )
 
-    runNAMD_prog='/home/home02/chmhch/NAMD_src/runNAMD_slave'
+    runNAMD_prog='/home/home02/chmhch/NAMD_src/runNAMD_slave_test'
 }
 
 function manyNodes(){

@@ -17,8 +17,8 @@ set title ' SF-BH\&HLYP/6-31+G*' font ',20'
 set tics font ',15'
 set xlabel 'Time (fs)' font ',20' offset 0,-1
 
-set ylabel 'Potential energy curves (Hartree)' font ',20' offset -3,0
-# set ylabel 'Population' font ',20' offset -3,0
+# set ylabel 'Potential energy curves (Hartree)' font ',20' offset -3,0
+set ylabel 'Population' font ',20' offset -3,0
 
 plot for [i=1:nstate] inputFile u 1:i+1 w l lw 3 title 'S'.(i-1)
 

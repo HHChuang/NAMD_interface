@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# $1 = Bonds.ang
+# $1 = Bonds.dat
 # $2 = line number of the selected time frame 
 #
 # 2022/08/12, Grace, H.G.Chuang@leeds.ac.uk
@@ -10,9 +10,9 @@ covB_low=0.0
 covB_up=2.0
 
 function main(){
-    # $1 = Bonds.ang
+    # $1 = Bonds.dat
 
-    # 1. Calculate the amount of successful covalent bond for both CH and HH bonds
+    # 1. Calculate the amount of successful covalent bond for selected bonds.
 
     calcCovB $@
     # output: $totCHbond, $totHHbond
@@ -38,7 +38,7 @@ function main(){
 
 function calcCovB(){
     # input:
-    # $1 = Bonds.ang (file)
+    # $1 = Bonds.dat (file)
     # $2 = line number of the selected time frame
     # 
     # output:

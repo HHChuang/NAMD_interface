@@ -26,7 +26,7 @@
 ### List of source codes
   1. Input data procession:  `dima2xyz`, `dima2inifile`
   2. On-the-fly dynamic propagation: `runNAMD_slave`, `macro_runNAMD`, `checkRunningDir`
-  3. Output data procession:  `check1traj`, `anaOneProd`, `macro_ana`, `plotStates.gnu`
+  3. Output data procession:  `check1traj`, `macro_chk`,`ana1traj`, `macro_ana`, `plotStates.gnu`
 ### Input data procession 
 - Purpose of each source code
     1. `dima2xyz`: Transform Bohr to angstrom in order to check the initial molecular structure via [Jmol](https://jmol.sourceforge.net).
@@ -51,10 +51,11 @@
         - Repeat steps 5 to 9. 
 ### Output data procession 
 - Purpose of each source code
-    1. `check1traj`: Transform raw data to useful information
-    2. `anaOneProd`: For one trajectory, calculate bonds length from the output of the previous step.
-    3. `macro_ana`: Call `anaOneProd` to analyse all trajectories. 
-    4. `plotStates.gnu`: Use gnuplot to plot potential energy curves, population of each electronic state, and non-adiabatic coupling for any two states. 
+    1. `check1traj`: Transform raw data to useful information for one trajectory. 
+    2. `macro_chk`: Call `check1traj` to transform raw data to useful information for all trajectories. 
+    3. `ana1traj`: For one trajectory, calculate bonds length from the output of the previous step.
+    4. `macro_ana`: Call `ana1traj` to analyse all trajectories. 
+    5. `plotStates.gnu`: Use gnuplot to plot potential energy curves, population of each electronic state, and non-adiabatic coupling for any two states. 
 ---
 ## Example of propagating trajectory 
 
@@ -82,7 +83,7 @@
     -  File: setting.dat  
     -  Especially check the number of atom and number of state for different molecule.
   
-3. Run dynamics.
+3. Run dynamics on HPC.
     - Input for `runNAMD_slave`
         1. File with molecular coordinate and momentum (g_1.iniPM).
         2. File with nuclear and electronic setting (setting.dat). 
@@ -113,24 +114,42 @@
        $ jmol c3h2f4.xyz 
        ```
        [<img src="https://user-images.githubusercontent.com/23027121/207396553-20de17e4-2ad3-45f7-839f-fd4ac715483c.mov" width="50%"/>](https://user-images.githubusercontent.com/23027121/207396553-20de17e4-2ad3-45f7-839f-fd4ac715483c.mov)
-
-
-       <!-- ![test](../NAMD_code/aux/CH4.png) -->
     
-2. Generate the coordinate plus momentum file (*.iniPM) by the sampling file. 
+2. Generate the file with both molecular coordinate and momentum (c3h2f4.iniPM) by the sampling file (c3h2f4.dima). 
+    - input: c3h2f4.dima, atomlist.dat 
+    - output: c3h2f4_*.iniPM
     ```
     $ dima2iniPM c3h2f4.dima atomlist.dat 
     ```
-3. After check the setting, create sub-directory for each trajectory. And then put all the *.iniPM into these subdirectories separately. Also, create the list for recording the sub-directory index. 
-   ```
-    $ for ((i=1;i<=5;i++))
-        do 
-            mkdir traj_$i
-            mv g_$i.iniPM traj_$i 
-            echo $i >> list.dat 
-        done 
-   ```
-4. Run dynamics. 
+
+3. Check the nuclear and electronic setting.
+    -  File: setting.dat  
+    -  Now, the number of atom is 9, and the number of state is 5 in this case.
+
+4. Use a loop to prepare necessary files. 
+    - Create sub-directory for each trajectory. The psudo-code is 
+        ```
+        $ mkdir traj_$(directory index)
+        ```
+    - And then put all the *.iniPM into these subdirectories separately. The psudo-code is 
+        ```
+        $ mv $(some name).iniPM traj_$(directory index)
+        ```
+    - Also, create the list for recording the sub-directory index. The psudo-code is 
+        ```
+        $ echo $(subdirectory index) >> list.dat
+        ```
+    - Combine above three steps, the real script for the testing 5 subdirectories is 
+        ```
+        $ for ((i=1;i<=5;i++))
+            do 
+                mkdir traj_$i
+                mv g_$i.iniPM traj_$i 
+                echo $i >> list.dat 
+            done 
+        ```
+
+5. Run dynamics on HPC. 
     ```
     $ macro_runNAMD list.dat setting.dat 
     ```

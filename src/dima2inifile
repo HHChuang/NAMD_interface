@@ -14,16 +14,16 @@
 
 keyword1=Geometry
 keyword2=Momenta
-namehead=$1
+namehead=$(echo $1 | cut -d '.' -f 1)
 fileExten=iniPM
 
 input=$1 
 atomlist=( $(cat $2) )
 natom=$( echo ${#atomlist[@]} )
-totL=$(grep "$keyword1" $input | tail -n 1 | awk '{print $2}')
+totL=$(grep -c "$keyword1" $input )
 
 rm -f $1*.iniPM 
-for (( i = 1 ; i <= 100 ; i++ ))
+for (( i = 1 ; i <= $totL ; i++ ))
 do 
     name=$namehead\_$i\.$fileExten
 

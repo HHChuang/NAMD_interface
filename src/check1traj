@@ -1,214 +1,234 @@
 #!/bin/bash
 # 
 # Purpose:
-#           Collect rawdata and analyse them
+#       Collect rawdata and analyse them
 # 
 # Input: 
-#   $1 = name of sub-directory 
-#   $2 = root of job name 
-#   $3 = target directory 
+#       $1 = target directory 
+#       $2 = file; name of sub-directory 
+#       $3 = file; root of job name 
 # 
 # Output: (in target directory; anal_)
-#   1. TE.dat : total energy 
-#   2. PE.dat : potential energy
-#   3. popu.dat : population 
-#   4. nonadCoup.dat : nonadiabatic coupling 
-#   5. traj.xyz : molecular structure in Cartesian coordinate
-#   6. Bonds.ang : individual geometric parameter
+#       1. TE.dat : total energy 
+#       2. PE.dat : potential energy
+#       3. popu.dat : population 
+#       4. nonadCoup.dat : nonadiabatic coupling 
+#       5. traj.xyz : molecular structure in Cartesian coordinate
+#       6. Bonds.ang : individual geometric parameter
 # 
 # 2022/07/12, Grace, H.G.Chuang@leeds.ac.uk
-# 2022/11/22, creat array atomlist() and then allow this script to be used for all molecules.
-# 
 # 
 
 function main(){
-    # 1. Generate an ordered list for qchem output files, and also analyse the status of these files.  
-
-    home=`pwd`
 
     #  type 1. multiple sub-directories 
     # orderedSubDir=(traj_10 traj_10_1) 
     # rootname=('methane' 'methane_420')
 
-    # type 2. one sub-directory 
-    orderedSubDir=($1) 
-    rootName=($2)
-    tarDir=$3
-
+    home=`pwd`
+    tarDir=$1
+    orderedSubDir=( $(cat $2) )
+    rootName=( $(cat $3) )
+    # echo 'test input'
+    # echo $tarDir, ${orderedSubDir[@]}
+    # echo ${rootName[@]}
+    # echo ''
+    
     # Extract variables from testfile ($rootName.1)
-    cd  $home/$orderedSubDir
-    get_var $rootName.1
+    get_var ${orderedSubDir[0]} ${rootName[0]}.1 $tarDir 
+
+    #   Generate an ordered list for qchem output files
+    #   output: ordered_list.dat in each subdir.
+    checkSubDir 
+
+
+    #   Extract all necessary information to $tarDir. 
+    #  
+    combineDir 
+
+    # output: PE.dat, TE.dat, popu.dat, traj.xyz and Bonds.ang 
+    processData $tarDir 
+
+}
+
+
+function get_var(){
+    # $1 = path of testing file 
+    # $2 = testfile
+    # $3 = target directory 
+    # atomic unit for time : 2.4189 * 10^-17 sec.
+
+    if [ -d $3 ]
+    then 
+        nPt_exist=$(wc -l $home/$3/PE.dat | awk '{print $1}')
+    else 
+        nPt_exist=0
+        mkdir $3
+    fi 
+
+    cd  $home/$1
+    testfile=$2
+
+    if [ ! -f $testfile ]
+    then 
+        echo 'No dynamic input file, stop program.'
+        exit 
+    fi 
+
+    natom=$( head -n 1 $testfile | awk '{print $1}')
+    nstat=$( head -n 1 $testfile | awk '{print $2}')
+    tstep=$( sed -n '3,3 p' $testfile | awk '{print $2}')
+    nbranch=$( sed -n '2,2 p' $testfile | awk '{print $1}')
+    time2fs=2.4189*0.01
+    line=$(( 4 + $natom ))
+    atomlist=( $(sed -n "5, $line p " $testfile | awk '{print $1}' ) )
+
+    # set parameters for processData() 
+    calcT=$(echo "scale=6; $tstep * $time2fs " | bc -l )
+
+    # nonadiabatic coupling 
+    tmp=$(awk ' !NF { printf sep NR ; sep=" " } END { printf "\n" }' $testfile | awk '{print $6}' )
+    line_nonad_i=$(( $tmp +1 ))
+    line_nonad_f=$(wc -l $testfile | cut -d ' ' -f 1 ) 
+    n_nonad=$(( $nstat * ($nstat - 1) / 2 ))
+    n_dof=$(( $natom * 3 ))
+
+    # population 
+    line_popu_i=$((7+2*$natom))
+    line_popu_f=$((6+2*$natom+$nstat))
+}
+
+
+function checkSubDir(){
+    # Generate an ordered list for qchem output files, and also analyse the status of these files.
+    # 
+    # output: ordered_list.dat and fail.dat in each subdirectory
 
     for ((subdir=0;subdir<${#orderedSubDir[@]};subdir++))
     do 
         cd $home/${orderedSubDir[$subdir]}
         echo ${orderedSubDir[$subdir]}
-        genList ${rootName[$subdir]} $nstate # output: ordered_list.dat 
-        checkOut ordered_list.dat 
-        echo '--------------------------------------'
+        genList ${rootName[$subdir]} # output: ordered_list.dat 
     done 
-
-    # 2. Extract desired information 
-    # Copy alll necessary qchem files into target directory; separate metadata to avoid contaminating original qchem files. 
-    # input: 
-    #   1. $tarDir 
-    #   2. ${orderedSubDir[@]}
-    #   3. ordered_list.dat in each subdirectories  
-    #   output directory: $tarDir (reordered qchem output files)
-    cd $home 
-    combineDir 
-
-    # output: PE.dat, TE.dat, popu.dat, traj.xyz and Bonds.ang 
-    processData $tarDir 
-    cd $home 
-
 }
 
-function get_var(){
-    # $1 = testfile
-    # atomic unit for time : 2.4189 * 10^-17 sec.
-    natom=$( head -n 1 $1 | awk '{print $1}')
-    nstate=$( head -n 1 $1 | awk '{print $2}')
-    tstep=$( sed -n '3,3 p' $1 | awk '{print $2}')
-    time2fs=2.4189*0.01
-    line=$(( 4 + $natom ))
-    atomlist=( $(sed -n "5, $line p " $1 | awk '{print $1}' ) )
-}
 
 function genList(){
+    # 
     # $1 = root name of trajectory 
-    # $2 = highest excited state 
+    # 
 
-    totfile=$(ls | grep -c out)
-    npts=$(($totfile / ( $2 + 1 ) ))
-    restpts=$(($totfile % ( $2 + 1 ) ))
-    rm -f ordered_list.dat 
+    rtname=$1 
+    npts=$( ls | grep -c _nonad.out )
+    echo $rtname > ordered_list.dat  # point zero 
     for ((i=1;i<=$npts;i++))
     do 
-        rtname=$1\_$i
-        echo $rtname\_nonad.out >> ordered_list.dat 
-        for (( s=1; s<=$2; s++ ))
-        do 
-            echo $rtname\_force\_$s.out >> ordered_list.dat 
-        done 
+        echo $1\_$i >> ordered_list.dat 
     done 
-    if [ $restpts -ge 1 ]
+
+    # Only save the new data.
+    # Consider point zero, such that the final point needs to add one. 
+    if [ $nPt_exist != 0 ]
     then 
-        echo $1\_$(($i))\_nonad.out >> ordered_list.dat 
-        if [ $restpts -gt 1 ]
-        then 
-            for (( s=1; s<=$(( $restpts-1 )); s++ ))
-            do
-                echo $1\_$(($i))\_force\_$s.out >> ordered_list.dat 
-            done 
-        fi 
+        sed -i "1, $(($nPt_exist+1)) d" ordered_list.dat 
     fi 
 }
 
-function checkOut(){
-    # $1 = qchem output file in an order list 
-    tot=$(wc -l $1 | awk '{print $1}')
-    suc=0
-    for name in `cat $1`
-    do 
-        if [ -f $name ]
-        then 
-            s=$(grep -c Thank $name)
-            suc=$(( $suc + $s ))
-        fi 
-    done 
-    # suc=$(grep -c Thank *.out | cut -d ':' -f 2 | grep -c 1)
-    fail=$(($tot-$suc))
-    grep -c Thank *.out | grep -v :1 | cut -d ':' -f 1 > fail.dat
-
-    echo "total: $tot, success: $suc, fail: $fail"
-    echo ''
-    echo 'Failed files: fail.dat '
-    cat fail.dat 
-    sed -i "$(($tot-$fail)),$ d" $1
-}
 
 function combineDir(){
+    # 
+    # Copy all necessary qchem files into target directory; separate metadata to avoid original qchem files be contaminated.
+    # 
     # input: 
-    #   1. target directory 
-    #   2. input sub-directory
-    #   3. nother inputs: ordered_list.dat in each subdirectories
+    #   1. $tarDir: target directory 
+    #   2. ${orderedSubDir[@]}: input sub-directory
+    #   3. ordered_list.dat in each subdirectories
     # 
     # output: 
-    #   reordered qchem output files 
+    #   $tarDir: reordered qchem output files 
+    #   ${tot_npt[@]}
+    # 
 
     # combine directory and move point into target directory 
-    rm -rf $tarDir 
-    mkdir $tarDir
-    totnpt=0
-    for ((dir=0; dir<${#orderedSubDir[@]}; dir++))
-    do 
-        # echo $home/${orderedSubDir[$dir]}/${rootname[$dir]}_*_nonad.out $home/$tarDir 
-        cp $home/${orderedSubDir[$dir]}/${rootName[$dir]}_*_nonad.out $home/$tarDir 
-        grep nonad $home/${orderedSubDir[$dir]}/ordered_list.dat |  sed 's/_nonad.out//g' > $home/$tarDir/ordered_list.dat  
-
-        cp $home/${orderedSubDir[$dir]}/${rootName[$dir]}*.te $home/$tarDir
-
-        cp $home/${orderedSubDir[$dir]}/${rootName[$dir]}*.1 $home/$tarDir
-
-        # rename and reorder each point
-        cd $home/$tarDir 
-        for name in `cat ordered_list.dat`
+    tot_npt=() 
+    if [ $nbranch == 0 ] 
+    then     
+        pt_i=$nPt_exist 
+        for ((dir=0; dir<${#orderedSubDir[@]}; dir++))
         do 
-            mv $name\_nonad.out $totnpt.out 
-            mv $name.te $totnpt.te 
-            mv $name.1 $totnpt.1
-            totnpt=$(($totnpt + 1 ))
-        done  
+            cd $home/${orderedSubDir[$dir]}
+            cp ordered_list.dat $home/$tarDir
+            added_npt=$( wc -l ordered_list.dat | awk '{print $1}' )
+            tot_npt+=( $(( $nPt_exist + $added_npt)) ) 
+            
+            for name in `cat ordered_list.dat`
+            do 
+                cp $name\_nonad.out $home/$tarDir 
+                cp $name.te $home/$tarDir
+                cp $name.1 $home/$tarDir
+            done 
 
-    done 
+            # rename and reorder each point
+            cd $home/$tarDir 
+            for name in `cat ordered_list.dat`
+            do 
+                pt_i=$(($pt_i + 1 ))
+                mv $name\_nonad.out $pt_i.out 
+                mv $name.te $pt_i.te 
+                mv $name.1 $pt_i.1
+            done  
+        done 
+    elif [ $nbranch == 1 ] #FIXME: cloning
+    then 
+        echo 'fix cloning'
+        exit 
+    fi 
 }
+
 
 function processData(){
     # $1 = target directory
-    cd $home/$1 
-    totnpt=$(ls | grep -v ${rootName[0]} | grep -c out)
 
-    rm -f PE.dat TE.dat popu.dat traj.xyz Bonds.ang nonadCoup.dat 
+    tardir=$1 
 
-    # Formating header for Bond.ang
-    bondname=()
-    for (( i=1;i<=$natom; i++ ))
-    do 
-        idx1=$(( $i - 1 ))
-        for (( j=$(( $i+1 )); j<=$natom; j++ ))
+    cd $home/$tardir 
+
+    # create header if there is no metadata 
+    if [ $nPt_exist == 0 ]
+    then 
+        rm -f PE.dat TE.dat popu.dat traj.xyz Bonds.ang nonadCoup.dat 
+
+        # Formating header for Bond.ang
+        bondname=()
+        for (( i=1;i<=$natom; i++ ))
         do 
-            idx2=$(( $j - 1 ))
-            bondname+=(  ${atomlist[$idx1]}$i${atomlist[$idx2]}$j )
+            idx1=$(( $i - 1 ))
+            for (( j=$(( $i+1 )); j<=$natom; j++ ))
+            do 
+                idx2=$(( $j - 1 ))
+                bondname+=(  ${atomlist[$idx1]}$i${atomlist[$idx2]}$j )
+            done 
         done 
-    done 
-    echo "#t ${bondname[@]}" > Bonds.ang 
+        echo "#t(fs) ${bondname[@]}(ang.)" > Bonds.dat 
 
-    calcT=$(echo "scale=6; $tstep * $time2fs " | bc -l )
-
-    # set parameters for extracting nonadiabatic coupling; 
-    testfile='0.1'
-    tmp=$(awk ' !NF { printf sep NR ; sep=" " } END { printf "\n" }' $testfile | awk '{print $6}' )
-    line_nonad_i=$(( $tmp +1 ))
-    line_nonad_f=$(wc -l $testfile | cut -d ' ' -f 1 ) 
-    n_nonad=$(( $nstate * ($nstate - 1) / 2 ))
-    n_dof=$(( $natom * 3 ))
-    # formating header for nonadCoup.dat 
-    nonadname=() 
-    for (( i=0; i < $nstate; i++ ))
-    do 
-        for (( j=$(( $i+1 )); j < $nstate; j++ ))
+        # Formating header for nonadCoup.dat 
+        nonadname=() 
+        for (( i=0; i < $nstat; i++ ))
         do 
-            nonadname+=( $i-$j )
-        done 
-    done 
-    echo "#t ${nonadname[@]}"  > nonadCoup.dat 
+            for (( j=$(( $i+1 )); j < $nstat; j++ ))
+            do 
+                nonadname+=( $i-$j )
+            done 
+        done
+        echo "#t ${nonadname[@]}"  > nonadCoup.dat 
+    fi 
 
-    for ((pt_i=0; pt_i<$totnpt; pt_i++))
+    for ((pt_i=$(($nPt_exist+1)); pt_i<$tot_npt; pt_i++))
     do 
+        t_i=$(echo "scale=6; $pt_i * $calcT " | bc -l )
+
         # 1. grep potential energy in each state: E.dat 
         Energy=$(grep 'Total energy for state' $pt_i.out | awk '{print $6}')
-        t_i=$(echo "scale=6; $pt_i * $calcT " | bc -l )
         echo $t_i ${Energy[@]} >> PE.dat
 
         te=$(cat $pt_i.te)
@@ -219,19 +239,19 @@ function processData(){
         echo $t_i >> traj.xyz
         grep -A $(($natom + 2)) 'Standard Nuclear Orientation (Angstroms)' $pt_i.out | tail -n $natom | awk '{print $2, $3, $4, $5}' >> traj.xyz 
 
-        # 3. calculate bond length: Bonds.ang 
+        # 3. calculate bond length: Bonds.ang  FIXME: time consuming 
         grep -A $(($natom + 2)) 'Standard Nuclear Orientation (Angstroms)' $pt_i.out | tail -n $natom | awk '{print $3, $4, $5}' > coord.tmp 
-        genBondsFile $t_i coord.tmp #output: Bonds.ang
+        genBondsFile $t_i coord.tmp #output: Bonds.dat 
 
         # 4. Calculate population 
         popu=()
-        sed -n "$((7+2*$natom)),$((6+2*$natom+$nstate)) p" $pt_i.1 | sed 's/(//g' | sed 's/)//g' | sed 's/,/ /g' > popu.tmp
-        for ((state_i=1;state_i<=$nstate;state_i++))
+        sed -n "$line_popu_i,$line_popu_f p" $pt_i.1 | sed 's/(//g' | sed 's/)//g' | sed 's/,/ /g' > popu.tmp
+        popu_re=( $(awk '{print $1}' popu.tmp) )
+        popu_im=( $(awk '{print $2}' popu.tmp) )
+        for ((state_i=0;state_i<$nstat;state_i++))
         do 
-            popu_re=$(sed -n "$state_i,$state_i p" popu.tmp | awk '{print $1}')
-            popu_im=$(sed -n "$state_i,$state_i p" popu.tmp | awk '{print $2}')
-            popu+=( $(awk "BEGIN {print $popu_re * $popu_re + $popu_im * $popu_im  }") )
-        done 
+            popu+=( $(awk "BEGIN { abs =  ${popu_re[$state_i]} * ${popu_re[$state_i]}  + ${popu_im[$state_i]}  * ${popu_im[$state_i]}; print $1, abs }") )
+        done
         echo $t_i ${popu[@]} >> popu.dat 
 
         # 5. Calculate nonadiabatic coupling 
@@ -258,25 +278,20 @@ function processData(){
     rm -f *.out *.1 *.te ordered_list.dat
 }
 
+
 function genBondsFile(){
     # $1 = time 
     # $2 = coord.tmp 
-    # output: Bonds.ang 
+    # output: Bonds.dat  
 
     t_i=$1 
 
-    coord_x=()
-    coord_y=()
-    coord_z=()
-    for ((coord_i=1;coord_i<=$natom;coord_i++))
-    do 
-        coord_x+=($(sed -n "$coord_i,$coord_i p" $2 | awk '{print $1}'))
-        coord_y+=($(sed -n "$coord_i,$coord_i p" $2 | awk '{print $2}'))
-        coord_z+=($(sed -n "$coord_i,$coord_i p" $2 | awk '{print $3}'))
-    done 
+    coord_x=( $(cat $2 | awk '{print $1}') )
+    coord_y=( $(cat $2 | awk '{print $2}') )
+    coord_z=( $(cat $2 | awk '{print $3}') )
 
     Bonds=()
-    for (( i=0; i<$natom; i++ ))
+    for (( i=0; i < $natom; i++ ))
     do 
         atom1=( ${coord_x[$i]} ${coord_y[$i]} ${coord_z[$i]} )
         for (( j=$(($i+1)); j<$natom; j++ ))
@@ -302,7 +317,9 @@ function genBondsFile(){
         done 
     done 
     
-    echo $t_i ${Bonds[@]} >> Bonds.ang
+    echo $t_i ${Bonds[@]} >> Bonds.dat 
+
 }
+
 
 main $@

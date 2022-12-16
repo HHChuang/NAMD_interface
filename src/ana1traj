@@ -1,0 +1,98 @@
+#!/bin/bash
+#
+# $1 = Bonds.dat
+# $2 = selected bonds index (number of column in $1; e.g.: column 1,2,3...)
+# $3 = threshold for covB
+#
+# 2022/12/15, Grace, H.G.Chuang@leeds.ac.uk
+# 
+
+
+
+function main(){
+
+    setParameters $@  # output: selectBL.dat 
+
+    checkDiss selectBL.dat 
+
+}
+
+function setParameters(){
+    covB_low=0.0
+    covB_up=$3
+
+    ncol=( $(cat $2) )
+    ncol_minus1=()
+    for ((i=0; i<${#ncol[@]}; i++))
+    do 
+        ncol_minus1+=( $(( ${ncol[$i]} - 1 )) ) # column array: index starts from 0 
+    done 
+
+    totT=$( wc -l $1 | awk '{print $1}' )
+    totT=$(( $totT - 1 )) # remove the header 
+
+    tmp=( $(head -n 1 $1 ) )
+    bondName=()
+    for i in `echo ${ncol_minus1[@]}`
+    do 
+        bondName+=( $(echo ${tmp[$i]}) )
+    done  
+
+    sed '1,1 d' $1 > bonds.tmp 
+    awk '{print $1}' bonds.tmp > tmp1
+    for i in `echo ${ncol[@]}`
+    do 
+        awk "{print \$$i}" bonds.tmp > tmp2 
+        paste tmp1 tmp2 > tmp 
+        mv tmp tmp1 
+    done 
+    echo "#t ${bondName[@]}" > selectBL.dat 
+    cat tmp1 >> selectBL.dat 
+    rm -f tmp1 tmp2 bonds.tmp 
+
+}
+
+function checkDiss(){
+    #  $1 = selectBL.dat 
+
+    # rm -f dissB_name.dat dissB_ang.dat 
+    # # check bond length in each snapshot 
+    # for ((i=2;i<=$(($totT+1));i++))
+    # do 
+    #     snapshot=( $( sed -n "$i,$i p" $1) )
+    #     dissB_name=() 
+    #     dissB_ang=()
+    #     # check each selected bond length 
+    #     for (( j=1; j<=${#ncol[@]}; j++ )) 
+    #     do 
+    #         bond_break=$( echo "${snapshot[$j]} > $covB_up" | bc -l )
+    #         if [ $bond_break == '1' ]
+    #         then 
+             
+    #             dissB_name+=( $(echo ${bondName[ $(( $j-1 )) ]}) )
+    #             dissB_ang+=(  $(echo ${snapshot[$j]}) )
+    #             echo ${snapshot[0]} ${dissB_name[@]} >> dissB_name.dat 
+    #             echo ${snapshot[0]} ${dissB_ang[@]} >> dissB_ang.dat 
+    #             # echo ${snapshot[0]} ${dissB_name[@]} ' dissociate.'
+    #         fi 
+    #     done 
+    # done 
+
+    # check bond length in the last time frame 
+    dissB_name=() 
+    dissB_ang=()
+    snapshot=( $(tail -n 1 $1) )
+    for (( j=1; j<=${#ncol[@]}; j++ )) 
+    do 
+        bond_break=$( echo "${snapshot[$j]} > $covB_up" | bc -l )
+        if [ $bond_break == '1' ]
+        then 
+            dissB_name+=( $(echo ${bondName[ $(( $j-1 )) ]}) )
+            dissB_ang+=(  $(echo ${snapshot[$j]}) )
+        fi 
+    done
+    # number of bonds are dissociated, dissociated bond name. 
+    lasttime=$( printf '%.0f' "${snapshot[0]}")
+    echo "$lasttime  ${#dissB_name[@]} | ${dissB_name[@]}"
+}
+main $@
